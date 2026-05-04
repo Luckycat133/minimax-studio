@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MiniMax Studio - 全模态 AI 创作平台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/themes.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦞</text></svg>">
+</head>
+<body>
+  <div id="toast-container"></div>
+
+  <div class="app-layout">
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <span class="logo-icon">🦞</span>
+          <div class="logo-text">
+            <h1>MiniMax Studio</h1>
+            <p>全模态 AI 创作平台</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="sidebar-quota" id="quota-display"></div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-title">创作工具</div>
+        <button class="nav-item active" data-model="image">
+          <span class="nav-icon">🎨</span>
+          <div class="nav-text">
+            <span class="nav-label">图片生成</span>
+            <span class="nav-desc">Image-01 · 50张/日</span>
+          </div>
+        </button>
+        <button class="nav-item" data-model="speech">
+          <span class="nav-icon">🎙️</span>
+          <div class="nav-text">
+            <span class="nav-label">语音合成</span>
+            <span class="nav-desc">Speech 2.8 · 4,000字符/日</span>
+          </div>
+        </button>
+        <button class="nav-item" data-model="music">
+          <span class="nav-icon">🎵</span>
+          <div class="nav-text">
+            <span class="nav-label">音乐生成</span>
+            <span class="nav-desc">Music 2.6 · 100首/日</span>
+          </div>
+        </button>
+        <button class="nav-item" data-model="chat">
+          <span class="nav-icon">💬</span>
+          <div class="nav-text">
+            <span class="nav-label">AI 对话</span>
+            <span class="nav-desc">MiniMax M2.7 · 智能对话</span>
+          </div>
+        </button>
+        <button class="nav-item" data-model="lyrics">
+          <span class="nav-icon">✍️</span>
+          <div class="nav-text">
+            <span class="nav-label">歌词生成</span>
+            <span class="nav-desc">辅助工具 · 智能创作</span>
+          </div>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button class="theme-toggle-btn" id="theme-toggle-btn">
+          <span class="theme-icon">🌙</span>
+          <span id="theme-label">暗色模式</span>
+        </button>
+        <div class="user-menu" id="user-menu" style="display:none;">
+          <button class="user-menu-btn" id="user-menu-toggle">
+            <span class="user-avatar">👤</span>
+            <span class="user-name" id="user-name">系统管理员</span>
+          </button>
+          <div class="user-dropdown" id="user-dropdown">
+            <button class="dropdown-item" id="my-works-btn">📁 我的作品</button>
+            <button class="dropdown-item" id="logout-btn">🚪 退出登录</button>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+
+      <header class="content-header">
+        <div class="header-left">
+          <button class="mobile-menu-btn" id="mobile-menu-btn">☰</button>
+          <div>
+            <h2 class="header-title" id="header-title">🎨 图片生成</h2>
+            <p class="header-desc" id="header-desc">使用 Image-01 模型生成图片</p>
+          </div>
+        </div>
+        <div class="header-right">
+          <div class="api-status" id="api-status">
+            <span class="status-dot disconnected"></span>
+            <span>未登录</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="content-body">
+        <div class="workspace">
+          <div class="config-panel" id="config-panel">
+          </div>
+
+          <div class="action-bar">
+            <button class="btn btn-primary btn-generate" id="generate-btn">
+              <span class="btn-icon">✨</span>
+              <span>开始生成</span>
+            </button>
+            <button class="btn btn-secondary" id="reset-btn">
+              <span>重置参数</span>
+            </button>
+          </div>
+
+          <div class="result-panel" id="result-panel">
+            <div class="result-empty" id="result-empty">
+              <div class="empty-icon" id="empty-icon">🎨</div>
+              <h3>开始创作</h3>
+              <p>配置参数后点击「开始生成」，结果将在此展示</p>
+            </div>
+            <div class="result-content" id="result-content" style="display:none;"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal" id="apikey-modal">
+    <div class="modal-backdrop" id="apikey-modal-backdrop"></div>
+    <div class="modal-content auth-modal-content">
+      <div class="auth-header">
+        <h2>🔑 配置 API Key</h2>
+        <button class="modal-close" id="apikey-modal-close">✕</button>
+      </div>
+      <form class="auth-form" id="apikey-form">
+        <div class="form-group">
+          <label class="form-label">MiniMax API Key</label>
+          <input type="password" class="form-input" id="apikey-input" placeholder="sk-xxx... 输入你的 MiniMax API Key" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label class="form-label">API 基础地址（可选）</label>
+          <input type="text" class="form-input" id="apikey-baseurl" placeholder="https://api.minimaxi.com" value="https://api.minimaxi.com">
+        </div>
+        <div class="auth-error" id="apikey-error"></div>
+        <button type="submit" class="btn btn-primary btn-block">确认连接</button>
+        <p style="color:var(--text-muted);font-size:12px;margin-top:12px;text-align:center;">
+          API Key 将保存在浏览器本地，不会上传到任何服务器。<br>
+          获取 API Key: <a href="https://platform.minimaxi.com/" target="_blank" rel="noopener" style="color:var(--accent-primary);">MiniMax 开放平台</a>
+        </p>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal" id="auth-modal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content auth-modal-content">
+      <div class="auth-header">
+        <h2 id="auth-modal-title">登录</h2>
+        <button class="modal-close" id="auth-modal-close">✕</button>
+      </div>
+      <form class="auth-form" id="auth-form">
+        <div class="form-group" id="auth-username-group" style="display:none;">
+          <label class="form-label">用户名</label>
+          <input type="text" class="form-input" id="auth-username" placeholder="3-20位字母数字下划线" autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label class="form-label">邮箱</label>
+          <input type="email" class="form-input" id="auth-email" placeholder="your@email.com" autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label class="form-label">密码</label>
+          <input type="password" class="form-input" id="auth-password" placeholder="至少8位，含大小写字母、数字和特殊字符" autocomplete="current-password">
+        </div>
+        <div class="auth-error" id="auth-error"></div>
+        <button type="submit" class="btn btn-primary btn-block" id="auth-submit-btn">登录</button>
+        <div class="auth-switch">
+          <span id="auth-switch-text">还没有账号？</span>
+          <a href="#" id="auth-switch-link">注册</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal" id="works-modal">
+    <div class="modal-backdrop" id="works-modal-backdrop"></div>
+    <div class="modal-content works-modal-content">
+      <div class="works-header">
+        <h2>📁 我的作品</h2>
+        <button class="modal-close" id="works-modal-close">✕</button>
+      </div>
+      <div class="works-body" id="works-content">
+      </div>
+    </div>
+  </div>
+
+  <div class="image-lightbox" id="image-lightbox">
+    <button class="lightbox-close" id="lightbox-close">✕</button>
+    <img class="lightbox-image" id="lightbox-image" src="" alt="">
+  </div>
+
+  <script src="js/polyfills.js"></script>
+  <script src="js/models.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/templates.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/backend-api.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>
