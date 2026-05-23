@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "puppeteer-automation": {
+      "source": "mindrally/skills",
+      "sourceType": "github",
+      "skillPath": "puppeteer-automation/SKILL.md",
+      "computedHash": "d24300d65f0114bed5d9779feb4df06d458adb684ce5bbcdd1907ece7fc9f07e"
+    }
+  }
+}
