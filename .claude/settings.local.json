@@ -1,0 +1,10 @@
+{
+  "enabledMcpjsonServers": [
+    "Memory",
+    "context7",
+    "GitHub"
+  ],
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true
+  }
+}
