@@ -391,13 +391,15 @@ class App {
 
   async showWorksModal() {
     if (!this.user) return;
-    if (this.directMode) {
-      Utils.showToast('直接模式下暂不支持作品管理', 'info');
-      return;
-    }
 
     this.worksModal.classList.add('open');
     const worksContent = document.getElementById('works-content');
+
+    if (this.directMode) {
+      worksContent.innerHTML = `<div class="works-empty"><span class="works-empty-icon">📁</span><p>直接模式下作品管理功能不可用</p><p style="color:var(--text-muted);font-size:13px;margin-top:8px;">登录账号后可保存并管理历史作品</p></div>`;
+      return;
+    }
+
     worksContent.innerHTML = '<div class="loading-spinner"></div><p>加载中...</p>';
 
     try {
