@@ -1,72 +1,46 @@
 # MiniMax Studio
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
-![JavaScript](https://img.shields.io/badge/JavaScript-ES2022-yellow)
-![Node.js](https://img.shields.io/badge/Node.js-18+-green)
+> **Status: Maintenance Mode — Archive decision pending**
+>
+> The current Git tree is not reproducibly buildable. Do not treat the Backend Mode instructions from older revisions as verified.
 
-Web-based studio for the [MiniMax API](https://www.minimaxi.com/) — supports text chat, image generation, video synthesis, speech, and music creation in a single interface with session history.
+MiniMax Studio is a browser interface experiment for MiniMax text, image, video, speech, and music APIs.
 
-## Features
+## Current audit status
 
-- **Text Chat** — Conversation with MiniMax language models, with session save and restore
-- **Image Generation** — Text-to-image and image-to-image via MiniMax Image API
-- **Video Synthesis** — Text-to-video and image-to-video generation
-- **Speech Synthesis** — Text-to-speech with configurable voice, speed, and emotion
-- **Music & Lyrics** — AI music and lyric generation
-- **Two modes** — Backend mode (Node.js + SQLite, with user auth and quota tracking) and Direct mode (API key stored in browser localStorage)
-- **Responsive UI** — Adapts to mobile, tablet, and desktop viewports
+As of 2026-07-18:
 
-## Installation
+- `package-lock.json` exists but the root `package.json` is missing;
+- `server/package-lock.json` exists but `server/package.json` is missing;
+- the previously documented `server/server.js` entry point is missing;
+- historical commits include a tracked `node_modules/` tree;
+- no mock API CI currently proves media-task behavior without consuming quota.
 
-### Backend Mode (recommended)
+Because the exact manifests and entry point are missing, Backend Mode cannot be honestly documented as runnable. See [REPOSITORY_AUDIT.md](REPOSITORY_AUDIT.md) and [issue #2](https://github.com/Luckycat133/minimax-studio/issues/2).
 
-```bash
-# Clone the repo
-git clone https://github.com/Luckycat133/minimax-studio.git
-cd minimax-studio
+## Direct Mode warning
 
-# Configure environment
-cp server/.env.example server/.env
-# Edit server/.env and set MINIMAX_API_KEY and other values
+Opening `index.html` may expose the direct browser experiment, but Direct Mode is suitable only for local personal testing:
 
-# Install server dependencies
-cd server && npm install
+- the API key is accessible to JavaScript running in that browser origin;
+- browser `localStorage` is long-lived and is not an appropriate default for a valuable production credential;
+- requests are sent directly to MiniMax;
+- model names and API contracts may be stale.
 
-# Start the server
-node server.js
-```
+Use a restricted, disposable key and remove it after testing. Do not deploy Direct Mode as a public shared site.
 
-Then open `http://localhost:3000` in your browser.
+## Required before active use
 
-### Direct Mode (no backend)
+1. Recover the exact package manifests and backend source from a trusted copy.
+2. Commit lockfiles and verify `npm ci`.
+3. Make Backend Mode the verified default.
+4. Add mock tests for text/image/video/speech/music flows, timeouts, cancellation, polling backoff, and download recovery.
+5. Record the MiniMax model-list source and verification date.
+6. Remove tracked dependency trees and, after backup, clean them from history.
 
-Open `index.html` in a browser directly, or serve it with any static file server. Enter your MiniMax API key when prompted — it is stored only in `localStorage`.
+## Archive rule
 
-## Project Structure
-
-```
-minimax-studio/
-├── index.html          # Main HTML entry point
-├── css/
-│   ├── styles.css      # Core styles
-│   └── themes.css      # Theme variables
-├── js/
-│   ├── app.js          # Main application controller
-│   ├── api.js          # MiniMax API client (direct mode)
-│   ├── backend-api.js  # Backend API client
-│   ├── models.js       # Model definitions and config panels
-│   ├── templates.js    # HTML template helpers
-│   └── utils.js        # Shared utilities
-└── server/
-    ├── server.js       # Express server with SQLite
-    └── package.json
-```
-
-## Requirements
-
-- Node.js 18+ (backend mode only)
-- A valid [MiniMax API key](https://www.minimaxi.com/)
+Archive after 30–60 days if the project is unused, the backend cannot be recovered, or API changes will not be maintained.
 
 ## License
 
