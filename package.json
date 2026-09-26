@@ -1,0 +1,9 @@
+{
+  "name": "minimax-studio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "minimax-studio: minimal dev dependency root for puppeteer-based tooling",
+  "devDependencies": {
+    "puppeteer": "^25.12.0"
+  }
+}
