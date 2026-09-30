@@ -60,7 +60,7 @@ class PagesBuildTests(unittest.TestCase):
         build_pages(self.source, self.output)
         files = {p.relative_to(self.output).as_posix()
                  for p in self.output.rglob("*") if p.is_file()}
-        self.assertEqual(files, set(PUBLIC_FILES) | {".nojekyll"})
+        self.assertEqual(files, set(PUBLIC_FILES))
         for relative in PUBLIC_FILES:
             self.assertEqual((self.output / relative).read_bytes(),
                              (self.source / relative).read_bytes())

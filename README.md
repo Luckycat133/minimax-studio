@@ -41,7 +41,7 @@ Use a restricted, disposable key and remove it after testing. Do not deploy Dire
 ## Static Pages publication boundary
 
 GitHub Pages publishes only the ten reviewed frontend files listed in
-`scripts/build_pages.py`, plus `.nojekyll`. The workflow never uploads the
+`scripts/build_pages.py`. The workflow never uploads the
 repository root, backend, runtime data, dependencies, screenshots, or local settings.
 New public assets require an explicit allowlist change.
 

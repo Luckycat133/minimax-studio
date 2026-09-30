@@ -39,10 +39,9 @@ def build_pages(source: Path, destination: Path) -> None:
         target = destination / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source / relative, target)
-    (destination / ".nojekyll").touch()
 
 
 if __name__ == "__main__":
     root = Path(__file__).resolve().parent.parent
     build_pages(root, root / "_site")
-    print(f"Prepared {len(PUBLIC_FILES)} public assets and .nojekyll in _site")
+    print(f"Prepared {len(PUBLIC_FILES)} public assets in _site")
