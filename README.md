@@ -38,6 +38,33 @@ Use a restricted, disposable key and remove it after testing. Do not deploy Dire
 5. Record the MiniMax model-list source and verification date.
 6. Remove tracked dependency trees and, after backup, clean them from history.
 
+## Static Pages publication boundary
+
+GitHub Pages publishes only the ten reviewed frontend files listed in
+`scripts/build_pages.py`, plus `.nojekyll`. The workflow never uploads the
+repository root, backend, runtime data, dependencies, screenshots, or local settings.
+New public assets require an explicit allowlist change.
+
+Validate and prepare a fresh artifact with Python 3 (no npm install or API key needed):
+
+```sh
+python3 -m unittest discover -s tests -v
+python3 scripts/build_pages.py
+```
+
+The build refuses an existing `_site` directory to prevent stale files from being
+published. Use a fresh checkout for each build. Pull requests validate and package
+the artifact; only the protected `main` branch can deploy it. Existing review and
+Pages environment protections still apply.
+
+Runtime database files are ignored and no longer tracked in new commits. This
+does **not** remove previous copies from public Git history, old artifacts, caches,
+or downloads, and does not establish whether they contained sensitive data.
+After the approved merge and successful Pages deployment, verify that the site
+and its CSS/JavaScript still load and that a HEAD request to
+`server/data/minimax.db` returns 404. Until then, the previous site remains live.
+This publication fix does not resolve the Direct Mode or backend limitations above.
+
 ## Archive rule
 
 Archive after 30–60 days if the project is unused, the backend cannot be recovered, or API changes will not be maintained.
