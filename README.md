@@ -1,22 +1,48 @@
 # MiniMax Studio
 
-> **Status: Maintenance Mode — Archive decision pending**
+> **Status: Voice-production candidate; real MiniMax use still requires account verification**
 >
-> The current Git tree is not reproducibly buildable. Do not treat the Backend Mode instructions from older revisions as verified.
+> This branch provides a runnable local recording workflow and a guarded MiniMax
+> adapter. Live-provider compatibility and browser visual acceptance remain open.
 
-MiniMax Studio is a browser interface experiment for MiniMax text, image, video, speech, and music APIs.
+MiniMax Studio retains its original creative-workbench identity. The legacy
+multimodal experiment remains separate from the new dialogue workflow.
+
+## Start the voice workspace
+
+With Node 20+, no runtime installation or credentials:
+
+```sh
+node server/dialogue-server.mjs
+```
+
+Open the exact localhost URL it prints. Generation starts disabled. Import CSV,
+configure cast voices, attach real WAV recordings, listen, approve/reject takes,
+and export a validated audio package. A standalone HTML build is also available:
+
+```sh
+python3 scripts/build_offline.py /new/path/MiniMax_Studio_Voice_Workspace.html
+```
+
+This file supports the full local-recording workflow but cannot call MiniMax.
+Only an explicitly enabled, budgeted local service can make provider requests;
+the key never goes in the frontend or a public deployment. See
+[workflow instructions](OFFLINE_WORKFLOW.md) and the
+[provider integration guide](docs/PROVIDER_INTEGRATION.md).
 
 ## Current audit status
 
-As of 2026-07-18:
+Rechecked against main `4968a627135d68a2dc09b838f809db43dddfc1ba` on 2026-10-04:
 
-- `package-lock.json` exists but the root `package.json` is missing;
-- `server/package-lock.json` exists but `server/package.json` is missing;
-- the previously documented `server/server.js` entry point is missing;
-- historical commits include a tracked `node_modules/` tree;
-- no mock API CI currently proves media-task behavior without consuming quota.
+- root and server package manifests both exist; older audit claims that they are
+  missing are stale;
+- `server/server.js` and the backend business source are still absent;
+- historical dependency trees are still tracked;
+- the recording workflow and guarded local service have synthetic-only tests that never consume quota;
+- the legacy live text/image/video/speech/music flows remain unverified.
 
-Because the exact manifests and entry point are missing, Backend Mode cannot be honestly documented as runnable. See [REPOSITORY_AUDIT.md](REPOSITORY_AUDIT.md) and [issue #2](https://github.com/Luckycat133/minimax-studio/issues/2).
+Backend Mode cannot be honestly documented as runnable. Historical context remains
+in [REPOSITORY_AUDIT.md](REPOSITORY_AUDIT.md) and [issue #2](https://github.com/Luckycat133/minimax-studio/issues/2).
 
 ## Direct Mode warning
 
@@ -27,11 +53,11 @@ Opening `index.html` may expose the direct browser experiment, but Direct Mode i
 - requests are sent directly to MiniMax;
 - model names and API contracts may be stale.
 
-Use a restricted, disposable key and remove it after testing. Do not deploy Direct Mode as a public shared site.
+Do not enter a valuable key into the legacy experiment. Do not deploy Direct Mode as a public shared site. The new offline workflow does not read or use those legacy credentials.
 
-## Required before active use
+## Remaining legacy multimodal work
 
-1. Recover the exact package manifests and backend source from a trusted copy.
+1. Recover and verify the backend source from a trusted copy; the manifests already exist.
 2. Commit lockfiles and verify `npm ci`.
 3. Make Backend Mode the verified default.
 4. Add mock tests for text/image/video/speech/music flows, timeouts, cancellation, polling backoff, and download recovery.
@@ -40,7 +66,7 @@ Use a restricted, disposable key and remove it after testing. Do not deploy Dire
 
 ## Static Pages publication boundary
 
-GitHub Pages publishes only the ten reviewed frontend files listed in
+GitHub Pages packages only the 17 explicitly allowlisted frontend files listed in
 `scripts/build_pages.py`. The workflow never uploads the
 repository root, backend, runtime data, dependencies, screenshots, or local settings.
 New public assets require an explicit allowlist change.
@@ -64,10 +90,6 @@ After the approved merge and successful Pages deployment, verify that the site
 and its CSS/JavaScript still load and that a HEAD request to
 `server/data/minimax.db` returns 404. Until then, the previous site remains live.
 This publication fix does not resolve the Direct Mode or backend limitations above.
-
-## Archive rule
-
-Archive after 30–60 days if the project is unused, the backend cannot be recovered, or API changes will not be maintained.
 
 ## License
 
