@@ -193,7 +193,16 @@ function renderTakes(){
     title.append(node('strong','',`${take.take_id} · ${(take.duration_ms/1000).toFixed(1)}s`),node('span','',`${take.source==='import'?'导入录音':'MiniMax 返回'} · ${!isCurrent?'已过期':take.review==='approved'?'已通过':take.review==='rejected'?'已退回':'待审核'}`));card.append(title);
     if(bytes){
       if(!audioURLs.has(take.asset_id))audioURLs.set(take.asset_id,URL.createObjectURL(new Blob([bytes],{type:'audio/wav'})));
-      const player=node('audio');player.controls=true;player.preload='metadata';player.src=audioURLs.get(take.asset_id);player.setAttribute('aria-label',`试听 ${take.take_id}`);card.append(player);
+      const player=node('audio'),playbackError=node('p','error');
+      const errorMessage=`${take.take_id} 无法播放。请重新导入支持的 WAV，或换用支持该格式的浏览器试听；原录音未删除，可用“备份工作包”保存。`;
+      playbackError.setAttribute('role','alert');playbackError.hidden=true;
+      player.addEventListener('error',()=>{if(!player.isConnected)return;playbackError.textContent=errorMessage;playbackError.hidden=false;notify(errorMessage,true);});
+      player.addEventListener('canplay',()=>{
+        if(!player.isConnected)return;
+        const recovered=Boolean(playbackError.textContent);playbackError.textContent='';playbackError.hidden=true;
+        if(recovered&&$('notice').textContent===errorMessage)notify(`${take.take_id} 已可播放，请重新试听后审核。`);
+      });
+      player.controls=true;player.preload='metadata';player.src=audioURLs.get(take.asset_id);player.setAttribute('aria-label',`试听 ${take.take_id}`);card.append(player,playbackError);
     }else card.append(node('p','muted-note','录音字节不在此浏览器中；需要重新导入 WAV，不能试听或通过审核。'));
     const buttons=node('div','take-actions'),approve=node('button','soft-button','审核通过'),reject=node('button','soft-button','退回');
     approve.disabled=!bytes||!isCurrent||take.review==='approved';reject.disabled=take.review==='rejected';
@@ -320,11 +329,12 @@ $('queue-start-btn').addEventListener('click',()=>action(async()=>{if(!requireSa
 $('queue-pause-btn').addEventListener('click',()=>queue.pause());$('queue-cancel-btn').addEventListener('click',()=>queue.cancelPending());
 async function refreshService(){
   if(document.body.dataset.localService!=='true')return;
-  try{const response=await fetch('/api/dialogue/status',{cache:'no-store'});if(!response.ok)throw new Error('状态读取失败');service=await response.json();}
+  let connected=false;
+  try{const response=await fetch('/api/dialogue/status',{cache:'no-store'});if(!response.ok)throw new Error('状态读取失败');service=await response.json();connected=true;}
   catch{service={enabled:false,reason:'本地服务连接失败'};}
-  $('provider-title').textContent=service.enabled?'本地生成服务已启用':'本地服务已连接，真实生成仍锁定';
+  $('provider-title').textContent=!connected?'本地服务连接失败':service.enabled?'本地生成服务已启用':'本地服务已连接，真实生成仍锁定';
   $('provider-description').textContent=service.enabled?`本次预算：${service.budget?.used_requests??0}/${service.budget?.max_requests??0} 次请求，${service.budget?.used_characters??0}/${service.budget?.max_characters??0} 字符。生成可能消耗账号额度；不会自动重试。`:service.reason||'启动服务时需明确确认权益与本次预算';
-  $('provider-badge').textContent=service.enabled?'受控生成':'未授权生成';
+  $('provider-badge').textContent=!connected?'服务未连接':service.enabled?'受控生成':'未授权生成';
   $('generate-line-btn').disabled=!service.enabled||!production.cast.find(item=>item.character===selected().character)?.voice_id;
   $('generate-line-btn').textContent=service.enabled?'生成 / 重做此条':'生成此条 · 服务未启用';
   renderQueue(queue.jobs,{running:queue.running,paused:queue.paused});

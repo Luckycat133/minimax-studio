@@ -164,6 +164,63 @@ test('DOM v2: corrupted WAV is rejected and creates no player or take',async()=>
   const app=setup(JSON.stringify(singleProject()));Object.defineProperty(app.$('audio-file'),'files',{value:[{size:60,arrayBuffer:async()=>new Uint8Array(60).buffer}]});
   app.$('audio-file').dispatchEvent(new app.window.Event('change'));await tick();assert.equal(app.$('take-list').querySelectorAll('audio').length,0);assert.match(app.$('notice').textContent,/WAV/);app.dom.window.close();
 });
+test('DOM v2: native player errors are visible, repeatable and clear after media recovery',async()=>{
+  const app=setup(JSON.stringify(singleProject()));await importWav(app);
+  const player=app.$('take-list').querySelector('audio'),before=JSON.stringify(app.productionState());
+  player.dispatchEvent(new app.window.Event('error'));
+  assert.match(app.$('take-list').textContent,/无法播放/);
+  assert.match(app.$('notice').textContent,/无法播放/);
+  assert.match(app.$('take-list').textContent,/工作包/);
+  player.dispatchEvent(new app.window.Event('error'));
+  assert.equal(app.$('take-list').querySelectorAll('[role="alert"]').length,1);
+  assert.equal(JSON.stringify(app.productionState()),before);
+  player.dispatchEvent(new app.window.Event('canplay'));
+  assert.equal(app.$('take-list').querySelector('[role="alert"]').textContent,'');
+  assert.match(app.$('notice').textContent,/已可播放/);
+  assert.equal(JSON.stringify(app.productionState()),before);app.dom.window.close();
+});
+test('DOM v2: media recovery does not overwrite a later unrelated user notice',async()=>{
+  const app=setup(JSON.stringify(singleProject()));await importWav(app);
+  const player=app.$('take-list').querySelector('audio');player.dispatchEvent(new app.window.Event('error'));
+  app.click('project-btn');const message=app.$('notice').textContent;
+  player.dispatchEvent(new app.window.Event('canplay'));
+  assert.equal(app.$('notice').textContent,message);app.dom.window.close();
+});
+test('DOM v2: detached players cannot overwrite feedback after line change or project reset',async()=>{
+  for(const replacement of ['line','project']){
+    const app=setup();await importWav(app);
+    const player=app.$('take-list').querySelector('audio');
+    player.dispatchEvent(new app.window.Event('error'));
+    assert.match(app.$('notice').textContent,/无法播放/);
+    if(replacement==='line')app.window.document.querySelector('[data-line-id="SC01_L002"]').click();
+    else{app.window.confirm=()=>true;app.click('sample-btn');}
+    assert.equal(player.isConnected,false);
+    const message=app.$('notice').textContent,before=JSON.stringify(app.productionState());
+    player.dispatchEvent(new app.window.Event('error'));player.dispatchEvent(new app.window.Event('canplay'));
+    assert.equal(app.$('notice').textContent,message);
+    assert.equal(JSON.stringify(app.productionState()),before);app.dom.window.close();
+  }
+});
+test('DOM v2: failed service status never claims connection; reload recovers without generation',async()=>{
+  for(const mode of ['network','http','json']){
+    let requests=0;const app=setup(undefined,{service:true,fetch:async(url)=>{
+      assert.equal(url,'/api/dialogue/status');requests++;
+      if(mode==='network')throw new Error('offline');
+      return mode==='http'?{ok:false}:{ok:true,json:async()=>{throw new Error('truncated');}};
+    }});await tick();
+    assert.match(app.$('provider-title').textContent,/连接失败/);
+    assert.doesNotMatch(app.$('provider-title').textContent,/已连接/);
+    assert.equal(app.$('provider-badge').textContent,'服务未连接');
+    assert.equal(app.$('generate-line-btn').disabled,true);assert.equal(app.$('queue-start-btn').disabled,true);
+    assert.equal(requests,1);app.dom.window.close();
+  }
+  let requests=0;const recovered=setup(undefined,{service:true,fetch:async(url)=>{
+    assert.equal(url,'/api/dialogue/status');requests++;
+    return{ok:true,json:async()=>({enabled:false,reason:'generation_disabled'})};
+  }});await tick();assert.match(recovered.$('provider-title').textContent,/已连接/);
+  assert.equal(recovered.$('provider-badge').textContent,'未授权生成');
+  assert.equal(recovered.$('generate-line-btn').disabled,true);assert.equal(requests,1);recovered.dom.window.close();
+});
 test('DOM v2: single-line generation cannot start previously queued batch; no key enters requests',async()=>{
   const requests=[],bytes=fixtureWav(),sha=[...new Uint8Array(await webcrypto.subtle.digest('SHA-256',bytes))].map(x=>x.toString(16).padStart(2,'0')).join('');
   const fetch=async(url,options)=>{if(url==='/api/dialogue/status')return{ok:true,json:async()=>({enabled:true,session_id:'test-session',budget:{max_requests:3,used_requests:requests.length,max_characters:600,used_characters:0}})};
