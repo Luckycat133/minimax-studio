@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, extname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { guardTestPage, runVoiceBrowserFlows } from './dialogue.browser.flows.mjs';
 const root = resolve(import.meta.dirname, '..');
 const temp = await mkdtemp(join(tmpdir(), 'minimax-offline-qa-'));
 const output = process.env.QA_OUTPUT_DIR || temp; await mkdir(output, { recursive: true });
@@ -23,17 +24,19 @@ const server = createServer(async (req, res) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 let browser;
-const report = { external_requests: [], page_errors: [], checks: [] };
+const report = { success: false, browser_execution: 'NOT_RUN', failure_stage: null, node_version: process.version, external_requests: [], page_errors: [], checks: [], live_provider: 'FORBIDDEN', audio_heard: 'NOT_ASSESSED' };
 function passed(message) { report.checks.push(message); console.log(`PASS ${message}`); }
 try {
+  report.failure_stage = 'browser_launch';
   browser = await puppeteer.launch({ headless: true, userDataDir: join(temp, 'browser-profile'), env: { ...process.env, HOME: temp, XDG_CONFIG_HOME: join(temp, 'config'), XDG_CACHE_HOME: join(temp, 'cache') }, executablePath: process.env.CHROME_PATH || '/usr/bin/chromium', args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'] });
+  report.browser_version = await browser.version();
+  report.browser_execution = 'RUNNING'; report.failure_stage = 'browser_workflows';
   const page = await browser.newPage(); await page.setViewport({ width: 1440, height: 1100 });
-  page.on('pageerror', error => report.page_errors.push(error.message));
-  await page.setRequestInterception(true);
-  page.on('request', request => { if (!request.url().startsWith(base) && !request.url().startsWith('data:') && !request.url().startsWith('blob:')) { report.external_requests.push(request.url()); request.abort(); } else request.continue(); });
+  await guardTestPage(page, [base], report);
   await page.goto(`${base}/dialogue.html`, { waitUntil: 'networkidle0' });
   await page.waitForSelector('.line-row');
   assert.equal(await page.$$eval('.line-row', rows => rows.length), 20);
+  assert.equal(await page.$eval('#role-count', el => el.textContent), '3');
   assert.equal(await page.$eval('#count-missing', el => el.textContent), '20');
   assert.equal(await page.$eval('.locked-button', el => el.disabled), true);
   await page.screenshot({ path: join(output, 'desktop-offline-workspace.png'), fullPage: true });
@@ -104,9 +107,7 @@ try {
   const wavPath = join(temp, 'synthetic-test-tone.wav'); await writeFile(wavPath, wav);
   const oneLinePath = join(temp, 'one-line.json'); await writeFile(oneLinePath, JSON.stringify({ ...snapshot, lines: [snapshot.lines[0]] }));
   const productionContext = await browser.createBrowserContext(), productionPage = await productionContext.newPage();
-  productionPage.on('pageerror', error => report.page_errors.push(error.message));
-  await productionPage.setRequestInterception(true);
-  productionPage.on('request', request => { if (!request.url().startsWith(base) && !/^(data:|blob:)/.test(request.url())) { report.external_requests.push(request.url()); request.abort(); } else request.continue(); });
+  await guardTestPage(productionPage, [base], report);
   await productionPage.goto(`${base}/dialogue.html`, { waitUntil: 'networkidle0' });
   await productionPage.click('#import-btn'); await (await productionPage.$('#import-file')).uploadFile(oneLinePath);
   await productionPage.waitForFunction(() => !document.getElementById('apply-import').disabled); await productionPage.click('#apply-import');
@@ -127,6 +128,7 @@ try {
   passed('real browser imports a synthetic WAV, advances native playback, persists reviewed bytes and downloads a verified audio ZIP');
   await productionContext.close();
   const restoreContext = await browser.createBrowserContext(), restorePage = await restoreContext.newPage();
+  await guardTestPage(restorePage, [base], report);
   await restorePage.goto(`${base}/dialogue.html`, { waitUntil: 'networkidle0' });
   await restorePage.click('#import-btn'); await (await restorePage.$('#import-file')).uploadFile(approvedZipPath);
   await restorePage.waitForFunction(() => !document.getElementById('apply-import').disabled); await restorePage.click('#apply-import');
@@ -134,13 +136,26 @@ try {
   assert.equal(await restorePage.$eval('#count-total', element => element.textContent), '1');
   await restoreContext.close(); passed('work ZIP restores real audio and approved state in a fresh browser storage context');
   assert.deepEqual(report.external_requests, []); assert.deepEqual(report.page_errors, []);
+  await runVoiceBrowserFlows({ browser, root, output, report, passed, base, snapshot });
   const portablePage = await browser.newPage(); const portableRequests = [], portableErrors = [];
   portablePage.on('pageerror', error => portableErrors.push(error.message)); portablePage.on('request', request => portableRequests.push(request.url()));
+  await portablePage.setRequestInterception(true);
+  portablePage.on('request', request => {
+    if (request.url() === pathToFileURL(portable).href || /^(data:|blob:)/.test(request.url())) void request.continue();
+    else { report.external_requests.push(request.url()); void request.abort(); }
+  });
   await portablePage.goto(pathToFileURL(portable).href, { waitUntil: 'load' }); await portablePage.waitForSelector('.line-row');
   assert.equal(await portablePage.$$eval('.line-row', rows => rows.length), 20);
   await portablePage.click('#check-btn'); assert.ok((await portablePage.$eval('#check-count', el => el.textContent)).includes('1 次预检'));
   assert.ok(portableRequests.every(url => url.startsWith('file:') || url.startsWith('data:'))); assert.deepEqual(portableErrors, []);
   passed('standalone HTML works from file:// with hashed CSP and no server/network');
-  report.success = true; await writeFile(join(output, 'browser-qa.json'), JSON.stringify(report, null, 2));
+  assert.deepEqual(report.external_requests, []); assert.deepEqual(report.page_errors, []);
+  report.success = true; report.browser_execution = 'PASS'; report.failure_stage = null;
   console.log(`QA artifacts: ${output}`);
-} finally { try { await browser?.close(); } finally { await new Promise(resolve => server.close(resolve)); } }
+} catch (error) {
+  report.browser_execution = report.failure_stage === 'browser_launch' ? 'BLOCKED_BEFORE_PAGE' : 'FAIL';
+  report.failure = String(error.stack || error); throw error;
+} finally {
+  try { await writeFile(join(output, 'browser-qa.json'), JSON.stringify(report, null, 2)); }
+  finally { try { await browser?.close(); } finally { await new Promise(resolve => server.close(resolve)); } }
+}
