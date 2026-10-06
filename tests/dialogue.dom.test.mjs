@@ -275,3 +275,31 @@ test('DOM v2: workspace ZIP restores reviewed audio in a fresh browser store',as
   const first=setup(JSON.stringify(singleProject()));await importWav(first);first.$('take-list').querySelector('button').click();first.click('draft-export-btn');await until(()=>first.downloads.length===1);const buffer=await first.downloads[0].blob.arrayBuffer();
   const second=setup();second.click('import-btn');Object.defineProperty(second.$('import-file'),'files',{value:[{name:'workspace.zip',size:buffer.byteLength,arrayBuffer:async()=>buffer}]});second.$('import-file').dispatchEvent(new second.window.Event('change'));await until(()=>!second.$('apply-import').disabled);second.click('apply-import');await until(()=>second.$('count-approved').textContent==='1');await tick();assert.equal(second.$('take-list').querySelectorAll('audio').length,1);assert.equal(second.productionState().takes[0].review,'approved');first.dom.window.close();second.dom.window.close();
 });
+
+test('DOM v2: review and rejection keep delivery filename and explanation consistent',async()=>{
+  const app=setup(JSON.stringify(singleProject()));
+  try {
+    await importWav(app);
+    app.$('take-list').querySelectorAll('button')[0].click();
+    assert.equal(app.$('filename').textContent,app.productionState().takes[0].filename);
+    assert.equal(app.$('filename-note').textContent,'真实音频 · 已审核');
+    app.$('take-list').querySelectorAll('button')[1].click();
+    assert.equal(app.$('filename').textContent,'尚无可交付音频');
+    assert.equal(app.$('filename-note').textContent,'须有当前版本已通过审核的音频');
+  } finally { app.dom.window.close(); }
+});
+test('DOM v2: asynchronously restored approved audio updates delivery labels without discarding edits',async()=>{
+  const idb=new IDBFactory(),first=setup(JSON.stringify(singleProject()),{indexedDB:idb});
+  await importWav(first);first.$('take-list').querySelector('button').click();
+  const saved=JSON.stringify(first.productionState()),filename=first.productionState().takes[0].filename;
+  first.dom.window.close();
+  const restored=setup(saved,{indexedDB:idb});
+  try {
+    restored.input('text','尚未保存的改写，恢复录音不应清除此处');
+    await until(()=>restored.$('count-approved').textContent==='1');
+    assert.equal(restored.$('filename').textContent,filename);
+    assert.equal(restored.$('filename-note').textContent,'真实音频 · 已审核');
+    assert.equal(restored.$('text').value,'尚未保存的改写，恢复录音不应清除此处');
+    assert.equal(restored.$('save-btn').disabled,false);
+  } finally { restored.dom.window.close(); }
+});

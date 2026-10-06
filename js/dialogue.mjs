@@ -70,9 +70,7 @@ function renderEditor() {
   $('check-count').textContent = `${line.checks} 次预检 · 预检不调用 API`;
   $('line-explanation').textContent = line.checks ? '结构与命名有效。预检不调用模型，也不替换已导入或已生成的录音。' : '检查当前台词与文件命名。不会生成任何音频。';
   $('check-btn').textContent = line.checks ? '仅重试此条预检' : '仅预检此条';
-  const current = getLineState(production,line.line_id,assets);
-  $('filename').textContent = current.status==='approved' ? current.take.filename : '尚无可交付音频';
-  $('filename-note').textContent = current.status==='approved' ? '真实音频 · 已审核' : '须有当前版本已通过审核的音频';
+  renderDeliveryState();
   renderTakes();
   $('history-count').textContent = `${line.history.length} 个旧版本`;
   $('history-list').replaceChildren();
@@ -183,7 +181,12 @@ window.addEventListener('beforeunload', event => { if (dirty || unpersisted || u
 
 
 function statusLabel(status) { return ({approved:'已审核',pending_review:'待试听审核',stale:'设置已变 · 旧音频',rejected:'已退回',missing_asset:'音频文件缺失',missing_audio:'无音频'})[status] ?? status; }
-function updateTakeState(next){production=next;project=production.project;persist();renderSummary();renderList();renderTakes();const state=getLineState(production,selectedId,assets);$('filename').textContent=state.status==='approved'?state.take.filename:'尚无可交付音频';}
+function renderDeliveryState(){
+  const current=getLineState(production,selectedId,assets);
+  $('filename').textContent=current.status==='approved'?current.take.filename:'尚无可交付音频';
+  $('filename-note').textContent=current.status==='approved'?'真实音频 · 已审核':'须有当前版本已通过审核的音频';
+}
+function updateTakeState(next){production=next;project=production.project;persist();renderSummary();renderList();renderTakes();renderDeliveryState();}
 function renderTakes(){
   $('take-list').replaceChildren();const current=fingerprint(production,selectedId), takes=production.takes.filter(take=>take.line_id===selectedId);
   if(!takes.length){$('take-list').append(node('p','muted-note','还没有真实录音。可导入 WAV；不会用静音替代缺失音频。'));return;}
@@ -231,7 +234,7 @@ async function restoreAssets(){
   }
   if(epoch!==restoreEpoch)return;
   $('audio-storage-status').textContent=missing?`${missing} 个录音文件缺失或未通过验证${limited?'；已达到 100 MiB 内存保护上限':''}`:'录音保存在本浏览器；请用工作包备份保留全部录音';
-  renderSummary();renderList();renderTakes();
+  renderSummary();renderList();renderTakes();renderDeliveryState();
 }
 let audioWrites=Promise.resolve();
 function addAudio(...args){const result=audioWrites.then(()=>commitAudio(...args));audioWrites=result.catch(()=>{});return result;}
