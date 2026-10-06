@@ -29,7 +29,8 @@ function setup(saved, options={}) {
   window.fetch = options.fetch ?? (() => { throw new Error('Network is forbidden in these tests'); });
   if(options.service)window.document.body.dataset.localService='true';
   if (saved) window.localStorage.setItem('minimax_studio_production_v2', saved);
-  if (options.queue) window.localStorage.setItem('minimax_dialogue_queue_v2', JSON.stringify(options.queue));
+  if (options.queueRaw !== undefined) window.localStorage.setItem('minimax_dialogue_queue_v2', options.queueRaw);
+  else if (options.queue) window.localStorage.setItem('minimax_dialogue_queue_v2', JSON.stringify(options.queue));
   window.eval(bundleScript);
   const $ = id => window.document.getElementById(id);
   const input = (id, value) => { $(id).value = value; $(id).dispatchEvent(new window.Event('input', { bubbles: true })); };
@@ -263,6 +264,101 @@ test('DOM v2: uncertain records survive replacement projects and queue storage f
   assert.equal(JSON.parse(app.window.localStorage.getItem('minimax_dialogue_queue_v2'))[0].line_id,'OLD_LINE');assert.match(app.$('queue-list').textContent,/OLD_LINE/);
   app.window.Storage.prototype.setItem=()=>{throw new Error('quota');};app.click('queue-missing-btn');assert.match(app.$('queue-summary').textContent,/队列保存失败/);
   const event=new app.window.Event('beforeunload',{cancelable:true});app.window.dispatchEvent(event);assert.equal(event.defaultPrevented,true);app.dom.window.close();
+});
+test('DOM v2: a late status refresh cannot erase another tab\'s uncertain operation',async()=>{
+  let finishStatus;
+  const app=setup(JSON.stringify(singleProject()),{service:true,fetch:()=>new Promise(resolve=>{finishStatus=resolve;})});
+  try{
+    const external=JSON.stringify([{job_id:1,line_id:'SC01_L001',revision:1,fingerprint:'{}',operation_id:'op-other-tab',session_id:'shared-session',status:'uncertain',uncertain:true}]);
+    app.window.localStorage.setItem('minimax_dialogue_queue_v2',external);
+    finishStatus({ok:true,json:async()=>({enabled:true,session_id:'shared-session'})});await tick();
+    assert.equal(app.window.localStorage.getItem('minimax_dialogue_queue_v2'),external);
+    assert.match(app.$('queue-summary').textContent,/其他标签页/);
+    const event=new app.window.Event('beforeunload',{cancelable:true});app.window.dispatchEvent(event);assert.equal(event.defaultPrevented,true);
+  }finally{app.dom.window.close();}
+});
+test('DOM v2: conflicting or failed queue persistence blocks a new provider dispatch',async()=>{
+  for(const mode of ['conflict','write-failure']){
+    let posts=0;const app=setup(JSON.stringify(singleProject()),{service:true,fetch:async(url)=>{
+      if(url==='/api/dialogue/status')return{ok:true,json:async()=>({enabled:true,session_id:'shared-session'})};
+      posts++;throw new Error('Provider dispatch must be blocked');
+    }});
+    try{
+      await tick();submitCast(app);
+      const external=JSON.stringify([{job_id:9,line_id:'SC01_L001',revision:1,fingerprint:'{}',operation_id:'op-keep-original',status:'uncertain',uncertain:true}]);
+      if(mode==='conflict')app.window.localStorage.setItem('minimax_dialogue_queue_v2',external);
+      else app.window.Storage.prototype.setItem=()=>{throw new Error('quota');};
+      app.click('generate-line-btn');await tick();
+      assert.equal(posts,0);
+      assert.equal(app.$('generate-line-btn').disabled,true);
+      assert.equal(app.$('queue-start-btn').disabled,true);
+      if(mode==='conflict')assert.equal(app.window.localStorage.getItem('minimax_dialogue_queue_v2'),external);
+      assert.match(app.$('queue-summary').textContent,/未覆盖|保存失败/);
+    }finally{app.dom.window.close();}
+  }
+});
+test('DOM v2: malformed stored queue is preserved and never authorizes a new request',async()=>{
+  for(const queueRaw of ['{"incomplete":', '{"operation_id":"keep-for-inspection"}', JSON.stringify([{job_id:9,line_id:'SC01_L001',revision:1,operation_id:'op-keep-for-inspection',status:'uncertain'}])]){
+    let posts=0;const app=setup(JSON.stringify(singleProject()),{queueRaw,service:true,fetch:async(url)=>{
+      if(url==='/api/dialogue/status')return{ok:true,json:async()=>({enabled:true,session_id:'same-session'})};
+      posts++;throw new Error('must not dispatch');
+    }});
+    try{
+      await tick();submitCast(app);app.click('queue-missing-btn');app.click('generate-line-btn');app.click('queue-start-btn');await tick();
+      assert.equal(app.window.localStorage.getItem('minimax_dialogue_queue_v2'),queueRaw);
+      assert.match(app.$('queue-summary').textContent,/读取失败.*未覆盖/);
+      assert.equal(app.$('generate-line-btn').disabled,true);assert.equal(posts,0);
+    }finally{app.dom.window.close();}
+  }
+});
+test('DOM v2: mixed-validity queue keeps raw records while valid original recovery stays visible',async()=>{
+  const queueRaw=JSON.stringify([
+    {job_id:1,line_id:'SC01_L001',revision:1,fingerprint:'{}',operation_id:'op-valid-recovery',status:'running'},
+    {job_id:2,line_id:'SC01_L002',revision:1,operation_id:'op-incomplete-recovery',status:'uncertain'}
+  ]);
+  const app=setup(JSON.stringify(singleProject(2)),{queueRaw});
+  try{
+    assert.equal(app.window.localStorage.getItem('minimax_dialogue_queue_v2'),queueRaw);
+    assert.match(app.$('queue-list').textContent,/恢复上次结果/);
+    app.click('queue-missing-btn');app.click('queue-cancel-btn');
+    assert.equal(app.window.localStorage.getItem('minimax_dialogue_queue_v2'),queueRaw);
+    assert.match(app.$('queue-summary').textContent,/部分队列记录读取失败/);
+    assert.equal(app.$('generate-line-btn').disabled,true);
+  }finally{app.dom.window.close();}
+});
+test('DOM v2: conflicting queue storage still permits GET-only recovery of an original result',async()=>{
+  const bytes=fixtureWav(),sha=[...new Uint8Array(await webcrypto.subtle.digest('SHA-256',bytes))].map(x=>x.toString(16).padStart(2,'0')).join('');
+  let posts=0,gets=0,operation;const app=setup(JSON.stringify(singleProject()),{service:true,fetch:async(url,options)=>{
+    if(url==='/api/dialogue/status')return{ok:true,json:async()=>({enabled:true,session_id:'same-session'})};
+    if(url.startsWith('/api/dialogue/result?')){gets++;assert.equal(new URL(url,'http://local').searchParams.get('operation_id'),operation);return{ok:true,json:async()=>({operation_id:operation,audio:{base64:Buffer.from(bytes).toString('base64'),format:'wav',sha256:sha}})};}
+    posts++;operation=JSON.parse(options.body).operation_id;return{ok:true,json:async()=>{throw new Error('truncated');}};
+  }});
+  try{
+    await tick();submitCast(app);app.click('generate-line-btn');await until(()=>app.$('queue-list').textContent.includes('恢复上次结果'));
+    const external=JSON.stringify([{job_id:9,line_id:'SC01_L001',revision:1,fingerprint:'{}',operation_id:'op-other-tab',status:'uncertain',uncertain:true}]);
+    app.window.localStorage.setItem('minimax_dialogue_queue_v2',external);
+    [...app.$('queue-list').querySelectorAll('button')].find(button=>button.textContent==='恢复上次结果').click();
+    await until(()=>app.productionState()?.takes?.length===1);await tick();
+    assert.equal(posts,1);assert.equal(gets,1);
+    assert.equal(app.window.localStorage.getItem('minimax_dialogue_queue_v2'),external);
+    assert.equal(app.$('generate-line-btn').disabled,true);
+    app.click('draft-export-btn');await until(()=>app.downloads.length===1);
+  }finally{app.dom.window.close();}
+});
+test('DOM v2: failure to persist the final session stamp blocks dispatch',async()=>{
+  let posts=0;const app=setup(JSON.stringify(singleProject()),{service:true,fetch:async(url)=>{
+    if(url==='/api/dialogue/status')return{ok:true,json:async()=>({enabled:true,session_id:'same-session'})};
+    posts++;throw new Error('must not dispatch');
+  }});
+  try{
+    await tick();submitCast(app);const originalSet=app.window.Storage.prototype.setItem;let runningWrites=0;
+    app.window.Storage.prototype.setItem=function(key,value){
+      if(key==='minimax_dialogue_queue_v2'&&JSON.parse(value).some(job=>job.status==='running')&&++runningWrites>=2)throw new Error('quota');
+      return originalSet.call(this,key,value);
+    };
+    app.click('generate-line-btn');await tick();assert.equal(posts,0);
+    assert.match(app.$('queue-list').textContent,/请求记录未可靠保存/);
+  }finally{app.dom.window.close();}
 });
 test('DOM v2: pending manual audio import blocks new model dispatch',async()=>{
   let finish,posts=0;const fetch=async(url)=>{if(url==='/api/dialogue/status')return{ok:true,json:async()=>({enabled:true,budget:{max_requests:2,max_characters:100}})};posts++;throw new Error('must not dispatch');};

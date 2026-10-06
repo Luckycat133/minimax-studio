@@ -5,6 +5,7 @@ import { sampleProject, parseCSV, parseProject, mergeRows, editLine, checkLine, 
 
 const $ = id => document.getElementById(id);
 const STORAGE_KEY = 'minimax_studio_production_v2';
+const QUEUE_STORAGE_KEY = 'minimax_dialogue_queue_v2';
 const assets = new Map(), audioURLs = new Map(), audioStore = new AudioStore(), unpersistedAssets = new Set();
 let restoreEpoch = 0;
 let unsavedAudio = false, pendingAudio = false, service = { enabled:false, reason:'未连接本地生成服务' };
@@ -12,6 +13,7 @@ let production = createProduction();
 let project = sampleProject(), selectedId = project.lines[0].line_id, pendingImport = null, pendingArchiveAssets = null, dirty = false;
 let storageWarning = '';
 let unpersisted = false, unpersistedQueue = false, storedSnapshot = null;
+let storedQueueSnapshot = null, queueStorageBlocked = '';
 let fileReadSequence = 0;
 try {
   const saved = localStorage.getItem(STORAGE_KEY); storedSnapshot = saved;
@@ -64,7 +66,7 @@ function renderEditor() {
   const cast = production.cast.find(item=>item.character===line.character);
   $('voice-name').textContent = cast?.voice_id ? (VOICES.find(([id])=>id===cast.voice_id)?.[1] ?? cast.voice_id) : '角色音色未分配';
   $('voice-description').textContent = `${line.character} · ${cast?.voice_id || '可先手动导入 WAV'}`;
-  $('generate-line-btn').disabled = !service.enabled || !cast?.voice_id;
+  $('generate-line-btn').disabled = !service.enabled || unpersistedQueue || !cast?.voice_id;
   $('generate-line-btn').textContent = service.enabled ? '生成 / 重做此条' : '生成此条 · 服务未启用';
   $('line-status').textContent = line.checks ? '结构预检通过' : '待预检';
   $('check-count').textContent = `${line.checks} 次预检 · 预检不调用 API`;
@@ -266,11 +268,26 @@ $('cast-form').addEventListener('submit',event=>{event.preventDefault();try{
 const operationId=()=>`op_${Date.now()}_${crypto.randomUUID().replaceAll('-','')}`;
 function queuedItem(id){const line=project.lines.find(item=>item.line_id===id);return{line_id:id,revision:line.revision,fingerprint:fingerprint(production,id),operation_id:operationId(),session_id:service.session_id ?? null};}
 function renderQueue(jobs,meta){
+  // A status refresh is also a render. It must not silently erase another tab's
+  // operation IDs, especially records needed for read-only result recovery.
+  let queueWarning=queueStorageBlocked;
+  try{
+    if(queueStorageBlocked)throw new Error(queueStorageBlocked);
+    if(localStorage.getItem(QUEUE_STORAGE_KEY)!==storedQueueSnapshot){
+      queueStorageBlocked='其他标签页已更新队列；本页未覆盖。请保持本页打开，先恢复未确定结果并备份工作包，再刷新';
+      throw new Error(queueStorageBlocked);
+    }
+    const content=JSON.stringify(jobs.map(job=>({...job})));
+    localStorage.setItem(QUEUE_STORAGE_KEY,content);storedQueueSnapshot=content;unpersistedQueue=false;
+  }catch{
+    unpersistedQueue=true;
+    queueWarning=queueStorageBlocked||'队列保存失败：请保持本页打开并先恢复未确定结果';
+  }
   const finished=new Set(jobs.filter(job=>job.status==='done').map(job=>job.operation_id)).size, waiting=jobs.filter(job=>job.status==='queued').length;
   const failed=jobs.filter(job=>['failed','uncertain'].includes(job.status)).length;
-  $('queue-summary').textContent=`${finished} 已完成 · ${waiting} 等待 · ${failed} 失败 / 结果不确定 · ${meta.running?'处理中':meta.paused?'已暂停':'未运行'} · 不会自动重试`;
-  $('generate-line-btn').disabled=!service.enabled||meta.running||!production.cast.find(item=>item.character===selected().character)?.voice_id;
-  $('queue-start-btn').disabled=!service.enabled||meta.running||!waiting;$('queue-pause-btn').disabled=!meta.running;
+  $('queue-summary').textContent=`${finished} 已完成 · ${waiting} 等待 · ${failed} 失败 / 结果不确定 · ${meta.running?'处理中':meta.paused?'已暂停':'未运行'} · 不会自动重试${queueWarning?' · '+queueWarning:''}`;
+  $('generate-line-btn').disabled=!service.enabled||unpersistedQueue||meta.running||!production.cast.find(item=>item.character===selected().character)?.voice_id;
+  $('queue-start-btn').disabled=!service.enabled||unpersistedQueue||meta.running||!waiting;$('queue-pause-btn').disabled=!meta.running;
   $('queue-list').replaceChildren();
   // Failed / uncertain operations must stay visible even in a long batch. Losing
   // their IDs could turn a read-only recovery into an accidentally billed retry.
@@ -303,14 +320,13 @@ function renderQueue(jobs,meta){
       }));controls.append(retry);row.append(controls);
     }$('queue-list').append(row);
   }
-  try{localStorage.setItem('minimax_dialogue_queue_v2',JSON.stringify(jobs.map(job=>({...job}))));unpersistedQueue=false;}
-  catch{unpersistedQueue=true;$('queue-summary').textContent+=' · 队列保存失败：请保持本页打开并先恢复未确定结果';}
 }
 const queue=new ProductionQueue({run:async(job,signal)=>{
+  if(!job.recover_only&&unpersistedQueue)throw new Error('队列未可靠保存，未发送生成请求；请先处理队列存储提示');
   if(!job.recover_only&&job.fingerprint!==fingerprint(production,job.line_id)){const error=new Error('台词或配音参数已改变，请按新内容重新排队');error.code='STALE';throw error;}
   if(!job.recover_only&&!service.enabled)throw new Error('本地生成服务未启用，未发送模型请求');
   if(job.recover_only&&job.session_id&&service.session_id!==job.session_id){const error=new Error('服务会话已变化，不能恢复旧缓存；请先核查是否已计费');error.uncertain=true;throw error;}
-  if(!job.recover_only){job.session_id=service.session_id ?? null;queue.emit();}
+  if(!job.recover_only){job.session_id=service.session_id ?? null;queue.emit();if(unpersistedQueue)throw new Error('请求记录未可靠保存，未发送生成请求；请先处理队列存储提示');}
   const payload=job.recover_only?null:buildSpeechRequest(production,job.line_id,job.operation_id);
   let response,result;
   try{
@@ -348,8 +364,17 @@ function initializeProduction(){
   for(const[id,label]of VOICES){const option=node('option','',label);option.value=id;$('cast-voice').append(option);}
   const labels=['自动','高兴','悲伤','生气','害怕','厌恶','惊讶','平静','流畅'];
   EMOTIONS.forEach((value,index)=>{const option=node('option','',labels[index]);option.value=value;$('cast-emotion').append(option);});
-  try{const old=JSON.parse(localStorage.getItem('minimax_dialogue_queue_v2')||'[]');if(Array.isArray(old)){queue.jobs=old.filter(job=>job&&Number.isSafeInteger(job.job_id)&&job.job_id>0&&typeof job.line_id==='string'&&/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(job.line_id)&&typeof job.fingerprint==='string'&&job.fingerprint.length<=16000&&typeof job.operation_id==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(job.operation_id)).map(job=>({line_id:job.line_id,revision:job.revision,fingerprint:job.fingerprint,operation_id:job.operation_id,session_id:typeof job.session_id==='string'?job.session_id:null,job_id:job.job_id,status:job.status==='running'?'uncertain':job.status==='queued'?'cancelled':['done','failed','uncertain','stale','cancelled'].includes(job.status)?job.status:'cancelled',error:job.status==='running'?'页面曾中断：上次请求结果不确定，不会自动重试':String(job.error||'').slice(0,300),recover_only:Boolean(job.recover_only),uncertain:job.status==='running'||Boolean(job.uncertain)}));queue.serial=queue.jobs.reduce((max,job)=>Math.max(max,job.job_id),0);queue.paused=queue.jobs.length>0;}}
-  catch{ /* Malformed queue cannot authorize or trigger requests. */ }
+  try{
+    storedQueueSnapshot=localStorage.getItem(QUEUE_STORAGE_KEY);
+    const old=JSON.parse(storedQueueSnapshot||'[]');
+    if(!Array.isArray(old))throw new Error('Invalid queue');
+    const valid=old.filter(job=>job&&Number.isSafeInteger(job.job_id)&&job.job_id>0&&typeof job.line_id==='string'&&/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(job.line_id)&&typeof job.fingerprint==='string'&&job.fingerprint.length<=16000&&typeof job.operation_id==='string'&&/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(job.operation_id));
+    // Keep the original bytes if even one record is malformed. Valid records can
+    // still be displayed/recovered, but filtering cannot destroy an operation ID.
+    if(valid.length!==old.length)queueStorageBlocked='部分队列记录读取失败：原记录未覆盖，请先核查浏览器存储；暂不新发生成请求';
+    queue.jobs=valid.map(job=>({line_id:job.line_id,revision:job.revision,fingerprint:job.fingerprint,operation_id:job.operation_id,session_id:typeof job.session_id==='string'?job.session_id:null,job_id:job.job_id,status:job.status==='running'?'uncertain':job.status==='queued'?'cancelled':['done','failed','uncertain','stale','cancelled'].includes(job.status)?job.status:'cancelled',error:job.status==='running'?'页面曾中断：上次请求结果不确定，不会自动重试':String(job.error||'').slice(0,300),recover_only:Boolean(job.recover_only),uncertain:job.status==='running'||Boolean(job.uncertain)}));
+    queue.serial=queue.jobs.reduce((max,job)=>Math.max(max,job.job_id),0);queue.paused=queue.jobs.length>0;
+  }catch{queueStorageBlocked='队列读取失败：原记录未覆盖，请先核查浏览器存储；暂不新发生成请求';}
   renderQueue(queue.jobs,{running:false,paused:queue.paused});restoreAssets();refreshService();
 }
 

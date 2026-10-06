@@ -76,6 +76,13 @@ again by importing or generating the intended new take.
   uncertain, the UI warns that a new request may incur another charge.
 - Per-process idempotency and request/character budgets reset on server restart.
   They are local safeguards, not a currency cap or provider billing guarantee.
+- Queue saves check the last observed browser-storage snapshot. A detected change
+  from another tab, unreadable queue data, or a failed save blocks new generation
+  instead of overwriting recovery records or sending an unrecorded request.
+  An already-sent request may still finish; read-only recovery remains available.
+  Keep that tab open, recover outstanding results and back up its audio before
+  refreshing. This conflict check is not an atomic cross-tab lock: use one
+  generation tab at a time. ZIP/JSON exports do not include operation-cache records.
 
 ## Files and integrity
 
