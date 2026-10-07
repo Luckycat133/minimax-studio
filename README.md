@@ -1,5 +1,16 @@
 # MiniMax Studio
 
+## Current tree clarification — 2026-10-03
+
+The root and `server/package.json` manifests now exist. The root manifest only
+provides Puppeteer tooling, and `server/server.js` is still absent; no verified
+backend start command has been recovered. The July audit below is historical:
+its missing-manifest statements do not describe today's tree, while its backend
+and live-media verification gaps remain unresolved by this documentation update.
+Use the [project maintenance skill](.agents/skills/minimax-studio-maintenance/SKILL.md)
+to distinguish Direct Mode, mock browser evidence and actual backend/provider
+results. This check did not run a server or spend generation quota.
+
 > **Status: Maintenance Mode — Archive decision pending**
 >
 > The current Git tree is not reproducibly buildable. Do not treat the Backend Mode instructions from older revisions as verified.
