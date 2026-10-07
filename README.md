@@ -8,6 +8,21 @@
 MiniMax Studio retains its original creative-workbench identity. The legacy
 multimodal experiment remains separate from the new dialogue workflow.
 
+## Current tree clarification — 2026-10-07
+
+The root and `server/package.json` manifests exist. The root manifest now includes
+fixture tests and build commands alongside Puppeteer development tooling. The
+legacy `server/server.js` entrypoint is still absent; the new local dialogue
+service does not recover the legacy multimodal backend. That legacy experiment
+remains in maintenance mode, with its archive decision pending.
+
+Use the [project maintenance skill](.agents/skills/minimax-studio-maintenance/SKILL.md)
+to distinguish Direct Mode, mock browser evidence and actual backend/provider
+results. Its 2026-10-03 source map predates this voice-production candidate;
+check the current files and scripts rather than treating that snapshot as a
+runtime or deployment pass. Neither this merge nor synthetic tests verify live
+MiniMax generation or browser acceptance.
+
 ## Start the voice workspace
 
 With Node 20+, no runtime installation or credentials:
@@ -32,7 +47,8 @@ the key never goes in the frontend or a public deployment. See
 
 ## Current audit status
 
-Rechecked against main `4968a627135d68a2dc09b838f809db43dddfc1ba` on 2026-10-04:
+Reconciled main `e061f760ec5218d9c0985572c4c242559f4b31d7` with voice candidate
+`e1347b36a6648c27c607f901399031ce9d5b5d89` on 2026-10-07:
 
 - root and server package manifests both exist; older audit claims that they are
   missing are stale;
@@ -41,7 +57,7 @@ Rechecked against main `4968a627135d68a2dc09b838f809db43dddfc1ba` on 2026-10-04:
 - the recording workflow and guarded local service have synthetic-only tests that never consume quota;
 - the legacy live text/image/video/speech/music flows remain unverified.
 
-Backend Mode cannot be honestly documented as runnable. Historical context remains
+Legacy Backend Mode cannot be honestly documented as runnable. Historical context remains
 in [REPOSITORY_AUDIT.md](REPOSITORY_AUDIT.md) and [issue #2](https://github.com/Luckycat133/minimax-studio/issues/2).
 
 ## Direct Mode warning
