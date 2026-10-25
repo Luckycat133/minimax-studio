@@ -4,6 +4,16 @@
   "private": true,
   "description": "minimax-studio: minimal dev dependency root for puppeteer-based tooling",
   "devDependencies": {
+    "fake-indexeddb": "^6.2.4",
+    "jsdom": "^26.1.0",
     "puppeteer": "^25.12.0"
+  },
+  "scripts": {
+    "test": "node --test tests/dialogue.test.mjs tests/production.test.mjs tests/dialogue-provider.test.mjs tests/dialogue-server.test.mjs",
+    "test:browser": "node tests/dialogue.browser.mjs",
+    "build": "python3 scripts/build_pages.py",
+    "test:dom": "node --test tests/dialogue.dom.test.mjs",
+    "build:offline": "python3 scripts/build_offline.py",
+    "dialogue": "node server/dialogue-server.mjs"
   }
 }

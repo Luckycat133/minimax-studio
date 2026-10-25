@@ -98,8 +98,10 @@ class PagesBuildTests(unittest.TestCase):
 
     def test_frontend_references_are_in_allowlist(self):
         parser = AssetReferences()
-        parser.feed((ROOT / "index.html").read_text())
-        self.assertEqual(parser.paths, set(PUBLIC_FILES) - {"index.html"})
+        for page in ("index.html", "dialogue.html"):
+            parser.feed((ROOT / page).read_text())
+        self.assertEqual(parser.paths, set(PUBLIC_FILES) - {"index.html", "dialogue.html", "js/dialogue-core.mjs", "js/production-core.mjs", "js/production-storage.mjs", "js/production-queue.mjs"})
+        self.assertIn("./dialogue-core.mjs", (ROOT / "js/dialogue.mjs").read_text())
 
     def test_runtime_databases_are_not_tracked(self):
         # Inspect names only. Never open existing runtime data.
