@@ -1828,3 +1828,6 @@ body, .sidebar, .main-content, .modal-content,
   border-color: var(--error);
   color: var(--error);
 }
+
+/* Separate offline workflow; deliberately not a model-switch button. */
+.dialogue-workflow-link { display:block; padding:12px; margin:4px 0 10px; color:var(--accent-primary-hover); border:1px solid var(--border-color); border-radius:12px; text-decoration:none; font-size:13px; }

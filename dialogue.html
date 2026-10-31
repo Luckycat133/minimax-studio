@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>台词交付 · MiniMax Studio</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/dialogue.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🦞%3C/text%3E%3C/svg%3E">
+  <script type="module" src="js/dialogue.mjs"></script>
+</head>
+<body class="dialogue-app">
+  <aside class="studio-rail">
+    <a class="studio-brand" href="dialogue.html"><span aria-hidden="true">🦞</span><span>MiniMax Studio<small>创作工作台</small></span></a>
+    <div class="rail-section">工作流</div>
+    <a class="rail-current" href="dialogue.html" aria-current="page"><span aria-hidden="true">▤</span> 游戏配音制作 <span class="tiny-tag">V2</span></a>
+    <a class="legacy-link" href="index.html">其他创作工具 ↗<small>原实验界面，可能请求 API Key</small></a>
+    <div class="rail-section role-heading">本项目角色 <span id="role-count">3</span></div>
+    <div id="role-list"></div>
+    <div class="rail-foot"><span class="offline-dot"></span> 本地工作区<small>台词与录音保存在此浏览器<br>单文件版不连接模型</small></div>
+  </aside>
+  <main class="dialogue-main">
+    <header class="dialogue-header">
+      <div><div class="eyebrow">GAME DIALOGUE / 台词交付</div><h1 id="project-title">雾灯旧物店 · 第一幕</h1></div>
+      <div class="header-actions"><button id="import-btn" class="soft-button">导入台词</button><button id="draft-export-btn" class="soft-button">备份工作包</button><button id="export-btn" class="primary-button">导出审核成品 ↗</button></div>
+    </header>
+    <section class="offline-notice" aria-label="离线限制"><span class="notice-icon" aria-hidden="true">!</span><div><strong id="provider-title">先导入录音，或连接本地生成服务</strong><p id="provider-description">可以配音色、导入真实 WAV、试听和审核后导出。单文件版不会调用 MiniMax；真实生成仅由获授权的本地服务执行。</p></div><span id="provider-badge" class="outline-tag">本地素材模式</span></section>
+    <section class="metrics" aria-label="项目状态">
+      <div><span>台词总数</span><strong id="count-total">20</strong><small>稳定 ID</small></div>
+      <div><span>已修改台词</span><strong id="count-modified">0</strong><small>旧版本保留</small></div>
+      <div><span>已审核可交付</span><strong id="count-approved">0</strong><small id="count-checked">0 条已预检</small></div>
+      <div class="missing-metric"><span>待处理台词</span><strong id="count-missing">20</strong><small id="pending-label">缺失 / 未审核 / 已过期</small></div>
+    </section>
+    <div class="workbench">
+      <section class="script-pane" aria-label="台词列表">
+        <div class="pane-heading"><h2>台词表</h2><span id="visible-count">20 条</span></div>
+        <div class="list-tools"><label class="search-field"><span class="sr-only">搜索台词、角色或 ID</span><input id="search" type="search" placeholder="搜索台词、角色或 ID" autocomplete="off"></label><label><span class="sr-only">筛选台词</span><select id="filter"><option value="all">全部台词</option><option value="modified">已修改</option><option value="unchecked">待预检</option><option value="checked">已预检</option><option value="pending_review">待试听审核</option><option value="approved">已审核通过</option><option value="stale">已过期</option><option value="missing_audio">没有音频</option></select></label></div>
+        <div id="line-list" class="line-list"></div>
+        <div class="list-footer"><span>CSV 按 ID 合并，未改动的台词保持原样</span><button id="sample-btn" class="text-button">重置示例</button></div>
+      </section>
+      <section class="editor-pane" aria-label="单条台词编辑器">
+        <div class="pane-heading"><div><span class="eyebrow">LINE INSPECTOR</span><h2 id="selected-id">SC01_L001</h2></div><span id="revision" class="revision-tag">v001</span></div>
+        <form id="line-form">
+          <div class="two-fields"><label>角色<input id="character" name="character" maxlength="40" required></label><label>情绪<input id="emotion" name="emotion" maxlength="40" placeholder="如：疑惑、平静"></label></div>
+          <label class="field-label">台词 <span id="char-count"></span><textarea id="text" name="text" maxlength="2000" rows="4" required></textarea></label>
+          <label class="field-label">读音 / 表演备注<textarea id="direction" name="direction" maxlength="500" rows="2" placeholder="人名、多音字、数字的读法与停顿"></textarea></label>
+          <div class="edit-actions"><span id="edit-status">当前版本未修改</span><button id="save-btn" class="soft-button" type="submit" disabled>保存修改</button></div>
+        </form>
+        <div class="voice-slot"><span class="voice-icon" aria-hidden="true">♪</span><div><strong id="voice-name">角色音色未分配</strong><p id="voice-description">选择角色的固定音色与说话参数</p></div><button id="cast-btn" class="soft-button">配置角色</button></div>
+        <div class="preflight-card"><div><span id="line-status" class="status-label">待预检</span><span id="check-count">0 次预检</span></div><p id="line-explanation">检查当前台词与文件命名。不会生成任何音频。</p><div class="preflight-actions"><button id="check-btn" class="soft-button">仅预检此条</button><button id="generate-line-btn" class="locked-button" disabled>生成此条 · 服务未连接</button></div></div>
+        <section class="take-section" aria-label="试音与审核">
+          <div class="take-heading"><h3>试音版本</h3><label class="audio-import-button">导入 WAV<input id="audio-file" type="file" accept=".wav,audio/wav" hidden></label></div>
+          <p id="audio-storage-status" class="muted-note">没有录音时不会显示假播放器</p>
+          <div id="take-list"></div>
+        </section>
+        <div class="filename-block"><span>当前交付文件 <small id="filename-note">须有当前版本已通过审核的音频</small></span><code id="filename"></code></div>
+        <details id="history-panel"><summary>版本历史 <span id="history-count">0</span></summary><div id="history-list"></div></details>
+      </section>
+    </div>
+    <section class="queue-panel" aria-label="生成队列">
+      <div class="queue-heading"><div><h2>制作队列</h2><p id="queue-summary">0 个任务 · 不会自动重试扣费</p></div><div class="queue-actions"><button id="queue-missing-btn" class="soft-button">未完成台词加入队列</button><button id="queue-start-btn" class="primary-button" disabled>开始队列</button><button id="queue-pause-btn" class="soft-button" disabled>完成当前后暂停</button><button id="queue-cancel-btn" class="text-button">取消等待任务</button></div></div><div id="queue-list"></div>
+    </section>
+    <footer class="workspace-footer"><span id="storage-status">示例台词为原创虚构内容 · 修改后仅保存在此浏览器（未加密）</span><button id="project-btn" class="text-button">另存项目 JSON（不含音频）</button></footer>
+    <p id="notice" class="feedback" role="status" aria-live="polite"></p>
+  </main>
+  <dialog id="import-dialog" aria-labelledby="import-title">
+    <div class="dialog-heading"><h2 id="import-title">导入台词</h2><button id="import-close" class="icon-button" aria-label="关闭导入">×</button></div>
+    <p>CSV 按 line_id 合并；JSON 恢复元数据；工作包 ZIP 恢复项目与实际录音。后两者会替换当前项目。应用前可以预览，取消不会改变内容。</p>
+    <label class="file-label">选择 CSV / JSON（2 MiB）或本工具工作包 ZIP（130 MiB）<input id="import-file" type="file" accept=".csv,.json,.zip,text/csv,application/json,application/zip"></label>
+    <label>或粘贴 CSV<textarea id="import-text" rows="6" placeholder="line_id,character,text,emotion,direction"></textarea></label>
+    <p id="import-error" role="alert"></p><div id="import-preview" aria-live="polite"></div>
+    <div class="dialog-actions"><button id="import-cancel" class="soft-button">取消</button><button id="preview-btn" class="soft-button">预览导入</button><button id="apply-import" class="primary-button" disabled>应用导入</button></div>
+  </dialog>
+  <dialog id="cast-dialog" aria-labelledby="cast-title">
+    <div class="dialog-heading"><h2 id="cast-title">配置角色音色</h2><button id="cast-close" class="icon-button" aria-label="关闭角色配置">×</button></div>
+    <p>音色来自 MiniMax 官方系统列表，仅分配不产生请求。更改后，该角色旧试音会过期；原音频仍保留。</p>
+    <form id="cast-form"><label>角色<input id="cast-character" readonly></label><label>系统音色<select id="cast-voice"></select></label>
+    <div class="two-fields"><label>模型<select id="cast-model"><option value="speech-2.8-turbo">Speech 2.8 Turbo</option><option value="speech-2.8-hd">Speech 2.8 HD</option></select></label><label>Provider 情绪<select id="cast-emotion"></select></label></div>
+    <div class="two-fields"><label>语速（0.5–2）<input id="cast-speed" type="number" min="0.5" max="2" step="0.05" value="1" required></label><label>音调（-12–12）<input id="cast-pitch" type="number" min="-12" max="12" step="1" value="0" required></label></div>
+    <label>读音词典：每行 词语/读音<textarea id="cast-pronunciation" rows="3" placeholder="乐川/(yue4)(chuan1)"></textarea></label><p class="muted-note">台词中的情绪和表演备注保留给人工审核，不会当作有效 API 参数直接发送。</p><p id="cast-error" role="alert"></p><div class="dialog-actions"><button id="cast-cancel" type="button" class="soft-button">取消</button><button class="primary-button" type="submit">保存角色配置</button></div></form>
+  </dialog>
+  <noscript>需要启用 JavaScript 才能编辑此本地工作区。这里不会调用模型或生成音频。</noscript>
+</body>
+</html>

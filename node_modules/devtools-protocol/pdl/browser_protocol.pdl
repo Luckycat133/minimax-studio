@@ -9,6 +9,7 @@ version
   minor 3
 
 include domains/Accessibility.pdl
+include domains/Ads.pdl
 include domains/Animation.pdl
 include domains/Audits.pdl
 include domains/Autofill.pdl
@@ -18,12 +19,14 @@ include domains/Browser.pdl
 include domains/CSS.pdl
 include domains/CacheStorage.pdl
 include domains/Cast.pdl
+include domains/CrashReportContext.pdl
 include domains/DOM.pdl
 include domains/DOMDebugger.pdl
 include domains/DOMSnapshot.pdl
 include domains/DOMStorage.pdl
 include domains/DeviceAccess.pdl
 include domains/DeviceOrientation.pdl
+include domains/DigitalCredentials.pdl
 include domains/Emulation.pdl
 include domains/EventBreakpoints.pdl
 include domains/Extensions.pdl
@@ -56,3 +59,4 @@ include domains/Tethering.pdl
 include domains/Tracing.pdl
 include domains/WebAudio.pdl
 include domains/WebAuthn.pdl
+include domains/WebMCP.pdl

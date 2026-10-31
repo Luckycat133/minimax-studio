@@ -20,6 +20,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+      - name: Set up Node for offline tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install test dependencies without browser downloads
+        run: npm ci --ignore-scripts
+      - name: Test offline DOM workflows
+        run: npm run test:dom
+      - name: Test offline dialogue contracts (no provider calls)
+        run: npm test
       - name: Test public artifact isolation
         run: python3 -m unittest discover -s tests -v
       - name: Build allowlisted public files

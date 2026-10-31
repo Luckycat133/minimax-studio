@@ -7,6 +7,13 @@ import shutil
 # New public assets must be deliberately added here during code review.
 PUBLIC_FILES = (
     "index.html",
+    "dialogue.html",
+    "css/dialogue.css",
+    "js/dialogue.mjs",
+    "js/dialogue-core.mjs",
+    "js/production-core.mjs",
+    "js/production-storage.mjs",
+    "js/production-queue.mjs",
     "css/styles.css",
     "css/themes.css",
     "js/polyfills.js",
