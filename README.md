@@ -1,5 +1,7 @@
 # MiniMax Studio
 
+[![llms.txt](https://img.shields.io/badge/llms.txt-available-blue)](llms.txt)
+
 > **Status: Voice-production candidate; real MiniMax use still requires account verification**
 >
 > This branch provides a runnable local recording workflow and a guarded MiniMax
@@ -44,6 +46,12 @@ Only an explicitly enabled, budgeted local service can make provider requests;
 the key never goes in the frontend or a public deployment. See
 [workflow instructions](OFFLINE_WORKFLOW.md) and the
 [provider integration guide](docs/PROVIDER_INTEGRATION.md).
+
+## AI Search & LLM Context
+
+Machine-readable architectural specifications and API documentation adhering to [llmstxt.org](https://llmstxt.org) standards:
+- [`llms.txt`](llms.txt): Concise project context, multimodal API capabilities, architecture, and security boundaries.
+- [`llms-full.txt`](llms-full.txt): Complete technical specification, request/response payload schemas, error codes, and audit references.
 
 ## Current audit status
 
