@@ -1,0 +1,63 @@
+# MiniMax Studio
+
+> A browser interface experiment for MiniMax AI multimodal APIs covering text generation, image creation, video generation, speech synthesis, and music composition.
+
+MiniMax Studio is an open-source web application designed as an experimental interface for testing and interacting with MiniMax's multimodal generative AI platform. The project currently operates in **Maintenance Mode**, featuring an experimental Direct Browser Client alongside specifications for a backend proxy architecture.
+
+## Project Status & Maintenance Mode
+
+- Status: Maintenance Mode (experimental direct browser mode active, archive decision pending).
+- Architecture State: Browser direct mode functional via static client (`index.html`); backend service (`server/server.js`) currently unrecovered.
+- Safe Static Deploy: GitHub Pages build workflow (`scripts/build_pages.py`) strictly allowlists 10 frontend assets, completely isolating credentials, database files, and backend artifacts.
+- Testing: Deterministic python-based static suite (`tests/test_pages_build.py`) validates asset confinement and prevents leaking runtime state.
+
+## Core Architecture & Components
+
+- Direct Browser Client: Standalone vanilla JavaScript frontend (`index.html`, `js/app.js`, `js/utils.js`, `js/templates.js`, `js/polyfills.js`) with responsive dark/light theme UI.
+- MiniMax Open API Client (`js/api.js`): Browser-native HTTP client making authenticated direct calls to `https://api.minimaxi.com` via Fetch and AbortController.
+- Model Configuration Layer (`js/models.js`): Centralized definitions for request payload schemas, default parameters, validation, and response parsers for each modality.
+- Backend Proxy Facade (`js/backend-api.js`): Interface handling JWT authentication, CSRF tokens, session management, and request retries (currently inactive due to unrecovered backend).
+- Client-Side Session Storage: Local credential and preference persistence via `localStorage` (`minimax_api_key`, theme settings).
+
+## Supported MiniMax Multimodal APIs
+
+- Text Generation & Chat (`/v1/text/chatcompletion_v2`):
+  - Models: `MiniMax-M2.7` (recommended), `MiniMax-Text-01`, `abab6.5s-chat`.
+  - Capabilities: Multi-turn dialogue, temperature/top_p sampling, max token management up to 32,768 tokens.
+- Image Generation (`/v1/image_generation`):
+  - Models: `image-01` (standard), `image-01-live` (stylized).
+  - Modes: Text-to-Image (t2i), Image-to-Image (i2i subject reference).
+  - Features: Aspect ratios (1:1, 16:9, 4:3, 3:2, 2:3, 3:4, 9:16, 21:9), prompt auto-optimizer, style weights, URL or Base64 response formats.
+- Speech Synthesis / T2A (`/v1/t2a_v2`):
+  - Models: `speech-2.8-hd`, `speech-2.8-turbo`, `speech-2.6-hd`, `speech-2.6-turbo`.
+  - Features: Over 20 built-in voice personas across Mandarin, English, and Japanese; speed/volume/pitch controls; emotions (happy, sad, angry, fluent, whisper); pause markers (`<#1.5#>`); subtitle extraction.
+- Music Generation (`/v1/music_generation`):
+  - Models: `music-2.6`.
+  - Features: Style/mood text prompts, optional custom lyrics with structure tags (`[Intro]`, `[Verse]`, `[Chorus]`, `[Bridge]`, `[Outro]`), instrumental mode, lyrics auto-optimizer, MP3/WAV/PCM export.
+- Lyrics Generation (`/v1/lyrics_generation`):
+  - Modes: Full song generation (`write_full_song`) and iterative lyrical editing/continuation (`edit`).
+- Video Generation (Architectural Specification):
+  - Target Endpoints: `/v1/video_generation` (async task dispatch and polling query flow).
+  - Scope: Documented in architectural roadmap for multimodal completion.
+
+## Important Security & Execution Notes
+
+- Direct Browser Mode Risks:
+  - User API key (`minimax_api_key`) is stored in browser `localStorage`.
+  - Requests dispatch directly to `https://api.minimaxi.com` from user origin.
+  - Recommended only for local personal experimentation with disposable, restricted API keys.
+  - Never deploy Direct Mode on public shared hosting without an authenticating backend proxy.
+- Production Backend Recommendations:
+  - Keep API keys server-side in secure environment variables.
+  - Implement rate limiting, quota enforcement, and CSRF token verification.
+- Static Pages Build Isolation:
+  - Only vetted assets are packaged into `_site` via `python3 scripts/build_pages.py`.
+  - Runtime database (`server/data/minimax.db`) and environment files are strictly excluded.
+
+## Optional
+
+- [Full LLM Documentation](llms-full.txt): Complete technical specification, API payloads, response structures, and codebase audit.
+- [Repository Audit](REPOSITORY_AUDIT.md): Detailed reproducibility and architectural audit log.
+- [Project Maintenance Skill](.agents/skills/minimax-studio-maintenance/SKILL.md): Operational guide for direct/backend mode inspection and media testing.
+- [Browser Test Report](BROWSER_TEST_REPORT.md): Automated Puppeteer verification results and screenshots.
+- [Project README](README.md): Primary repository overview and static pages publication guide.

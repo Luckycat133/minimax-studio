@@ -1,0 +1,492 @@
+# MiniMax Studio — Complete Technical Specification & LLM Reference
+
+> Comprehensive system architecture, API schemas, execution modes, security boundaries, and repository audit documentation for MiniMax Studio.
+
+---
+
+## 1. Project Overview & Status
+
+MiniMax Studio is an open-source multimodal generative AI studio designed for web browsers to interface with MiniMax's foundation models. It provides a visual workspace for text conversation, image generation, speech synthesis (text-to-audio), music composition, and lyric creation.
+
+### Maintenance Mode Notice
+
+- **Repository Status**: Maintenance Mode (decision pending archive / backend recovery).
+- **Current Operational Profile**: Direct Browser Client mode (`index.html`) using client-provided API keys against MiniMax Open API endpoints (`https://api.minimaxi.com`).
+- **Backend Status**: Backend server entry point (`server/server.js`) is unrecovered; backend mode is non-functional without restoring the server implementation.
+- **Production Guardrails**: The root project must not be hosted publicly in Direct Mode with shared credentials. A static deployment boundary exists for GitHub Pages (`scripts/build_pages.py`) that strictly packages 10 allowlisted frontend files and prevents leakage of databases or private environment configuration.
+
+---
+
+## 2. System Architecture
+
+```
+                          +-------------------------------------------------------+
+                          |                   Web Browser                         |
+                          |                                                       |
+                          |   +--------------------+     +--------------------+   |
+                          |   |   index.html       |     |   Theme & CSS      |   |
+                          |   |   (Single Page UI) |     |  (styles/themes)   |   |
+                          |   +---------+----------+     +--------------------+   |
+                          |             |                                         |
+                          |             v                                         |
+                          |   +--------------------+                              |
+                          |   |     js/app.js      |                              |
+                          |   |  (UI Controller &  |                              |
+                          |   |   Mode Detection)  |                              |
+                          |   +----+----------+----+                              |
+                          |        |          |                                   |
+                          |        |          v                                   |
+                          |        |   +----------------------------------+       |
+                          |        |   | js/models.js                     |       |
+                          |        |   | (Model Configs, Request Builders,|       |
+                          |        |   |  Response Parsers)               |       |
+                          |        |   +----------------------------------+       |
+                          |        |          ^                                   |
+                          |        v          |                                   |
+                          |   +---------------+----+                              |
+                          |   |     js/api.js      |                              |
+                          |   |  (Direct Browser   |                              |
+                          |   |    HTTP Client)    |                              |
+                          |   +---------+----------+                              |
+                          |             |                                         |
+                          |             | localStorage: minimax_api_key           |
+                          +-------------|-----------------------------------------+
+                                        | Direct HTTPS (Bearer Auth)
+                                        v
+                          +-------------------------------------------------------+
+                          |      MiniMax Open API (api.minimaxi.com)              |
+                          |                                                       |
+                          |  - /v1/text/chatcompletion_v2 (Chat/Text)            |
+                          |  - /v1/image_generation       (Image-01)              |
+                          |  - /v1/t2a_v2                 (Speech 2.8)            |
+                          |  - /v1/music_generation       (Music 2.6)             |
+                          |  - /v1/lyrics_generation      (Lyric Assistant)       |
+                          +-------------------------------------------------------+
+```
+
+### Component Breakdown
+
+1. **`index.html`**:
+   - Single-page application layout with responsive navigation sidebar, parameter configuration panel, action buttons, and preview results area.
+   - Built-in modal dialogs: API Key configuration (`#apikey-modal`), Authentication (`#auth-modal`), Works history (`#works-modal`), and Lightbox (`#image-lightbox`).
+
+2. **`js/app.js` (Application Controller)**:
+   - Probes `/api/health` with a 3000ms timeout on startup via `detectMode()`.
+   - If `/api/health` fails or is unreachable, activates **Direct Mode** (`this.directMode = true`).
+   - Retrieves or prompts for `minimax_api_key` stored in browser `localStorage`.
+   - Handles switching between modalities: `image`, `speech`, `music`, `chat`, and `lyrics`.
+   - Binds UI inputs, performs client-side validation, invokes generation methods, and renders output cards.
+
+3. **`js/models.js` (Model Specification & Adapter Layer)**:
+   - Contains `MODEL_CONFIGS` dictionary with metadata, parameters schema, `buildRequest(params)` builders, and `parseResponse(data)` parsers.
+   - Standardizes parameters across modalities, dynamic parameter visibility (e.g. `condition: { field: 'mode', value: 'i2i' }`), and error mappings.
+
+4. **`js/api.js` (Direct Client Implementation)**:
+   - Base URL: `https://api.minimaxi.com`.
+   - Headers: `Content-Type: application/json`, `Authorization: Bearer <API_KEY>`.
+   - Timeout handling using `AbortController` (default 120s; music generation uses 180s).
+   - Hex-to-Blob decoding (`hexToBlob(hex, mimeType)`) for audio responses.
+   - Media download management (`downloadBlob(blob, filename)`).
+
+5. **`js/backend-api.js` (Backend Facade - Inactive in Direct Mode)**:
+   - Implements JWT access/refresh token management, CSRF validation (`X-CSRF-Token`, `X-CSRF-Session`), exponential backoff retries, and offline queueing.
+   - Designed to communicate with an Express proxy server at `/api/*`.
+
+6. **`js/utils.js` & `js/templates.js`**:
+   - Helper functions: `formatTime`, `formatFileSize`, `generateId`, `debounce`, `showToast`, `fileToBase64`, `copyToClipboard`.
+   - HTML templating for results rendering, form generators, and media players.
+
+---
+
+## 3. Multimodal API Endpoints & Request/Response Contracts
+
+### 3.1. Image Generation
+
+- **Endpoint**: `POST /v1/image_generation`
+- **Supported Models**:
+  - `image-01`: Standard generation model.
+  - `image-01-live`: Stylized model supporting specific artistic genres and weighting.
+- **Generation Modes**:
+  - `t2i` (Text-to-Image): Generates images based purely on prompt description.
+  - `i2i` (Image-to-Image): Subject reference image guided synthesis.
+
+#### Request Schema
+
+```json
+{
+  "model": "image-01",
+  "prompt": "Cyberpunk street in the rain with neon reflections",
+  "aspect_ratio": "16:9",
+  "n": 1,
+  "response_format": "url",
+  "prompt_optimizer": false,
+  "seed": 42,
+  "style": {
+    "style_type": "photorealistic",
+    "style_weight": 0.8
+  },
+  "subject_reference": [
+    {
+      "type": "character",
+      "image_file": "data:image/jpeg;base64,..."
+    }
+  ]
+}
+```
+
+#### Parameter Details
+
+| Field | Type | Required | Options / Range | Description |
+|---|---|---|---|---|
+| `model` | string | Yes | `image-01`, `image-01-live` | Generation model version |
+| `prompt` | string | Yes | Max 1500 chars | Descriptive visual prompt |
+| `aspect_ratio` | string | No | `1:1`, `16:9`, `4:3`, `3:2`, `2:3`, `3:4`, `9:16`, `21:9` | Output resolution aspect ratio |
+| `n` | number | No | `1` to `9` (default `1`) | Number of images to generate |
+| `response_format` | string | No | `url`, `base64` (default `url`) | Output delivery format |
+| `prompt_optimizer` | boolean | No | `true`, `false` (default `false`) | LLM-based automatic prompt expansion |
+| `style.style_type` | string | Conditional | `anime`, `photorealistic`, `3d`, `illustration`, `watercolor` | Only for `image-01-live` |
+| `style.style_weight` | number | Conditional | `0.01` - `1.0` (default `0.8`) | Weight of artistic style |
+| `subject_reference` | array | Conditional | Array of image references | Required for `i2i` mode |
+
+#### Response Schema
+
+```json
+{
+  "base_resp": {
+    "status_code": 0,
+    "status_msg": "success"
+  },
+  "data": {
+    "image_urls": [
+      "https://minimax-image-cdn.com/output/abc12345.png"
+    ]
+  },
+  "metadata": {},
+  "id": "task_image_987654321"
+}
+```
+
+---
+
+### 3.2. Speech Synthesis (T2A v2)
+
+- **Endpoint**: `POST /v1/t2a_v2`
+- **Supported Models**:
+  - `speech-2.8-hd`: High definition synthesis (Speech 2.8).
+  - `speech-2.8-turbo`: Low latency generation (Speech 2.8).
+  - `speech-2.6-hd`, `speech-2.6-turbo`: Legacy 2.6 series.
+
+#### Request Schema
+
+```json
+{
+  "model": "speech-2.8-hd",
+  "text": "欢迎使用 MiniMax 全模态 AI 平台！<#1.0#> 这里可以生成极高品质的声音。",
+  "stream": false,
+  "voice_setting": {
+    "voice_id": "female-shaonv",
+    "speed": 1.0,
+    "vol": 1.0,
+    "pitch": 0,
+    "emotion": "happy"
+  },
+  "audio_setting": {
+    "sample_rate": 32000,
+    "bitrate": 128000,
+    "format": "mp3",
+    "channel": 1
+  },
+  "language_boost": "Chinese",
+  "output_format": "hex"
+}
+```
+
+#### Parameter Details
+
+| Field | Type | Range / Options | Description |
+|---|---|---|---|
+| `text` | string | Max 10,000 chars | Text input; supports pause tags `<#seconds#>` and tone annotations `(laughs)` |
+| `voice_setting.voice_id` | string | `female-shaonv`, `female-yujie`, `male-qn-qingse`, `male-qn-jingying`, `Chinese (Mandarin)_News_Anchor`, `English_Graceful_Lady`, etc. | Selectable voice timbre |
+| `voice_setting.speed` | float | `0.5` - `2.0` (step `0.1`, default `1.0`) | Playback speed |
+| `voice_setting.vol` | float | `0.1` - `10.0` (default `1.0`) | Audio volume multiplier |
+| `voice_setting.pitch` | integer | `-12` - `12` (default `0`) | Semitone pitch shift |
+| `voice_setting.emotion` | string | `calm`, `happy`, `sad`, `angry`, `fearful`, `disgusted`, `surprised`, `fluent`, `whisper` | Voice emotion control |
+| `audio_setting.format` | string | `mp3`, `wav`, `flac`, `pcm` | Audio container format |
+| `audio_setting.sample_rate`| integer | `8000`, `16000`, `22050`, `24000`, `32000`, `44100` | Sample frequency |
+| `audio_setting.bitrate` | integer | `32000`, `64000`, `128000`, `256000` | Audio bitrate in bps |
+| `output_format` | string | `url`, `hex` (default `url` or `hex`) | Raw hex string or hosted media URL |
+
+#### Response Schema
+
+```json
+{
+  "base_resp": {
+    "status_code": 0,
+    "status_msg": "success"
+  },
+  "data": {
+    "audio": "4944330300000000002354495432...",
+    "status": 2,
+    "subtitle_file": "https://minimax-cdn.com/subtitles/sub_123.vtt"
+  },
+  "extra_info": {
+    "audio_length": 4.82,
+    "audio_sample_rate": 32000,
+    "audio_size": 77120
+  },
+  "trace_id": "0194e82b78912345"
+}
+```
+
+*Note: In Direct Mode, hex-encoded audio streams (`data.audio`) are parsed in the client into `Uint8Array` bytes and converted to a browser Blob URL via `URL.createObjectURL`.*
+
+---
+
+### 3.3. Music Generation
+
+- **Endpoint**: `POST /v1/music_generation`
+- **Supported Models**: `music-2.6`
+- **Timeout**: 180 seconds recommended due to generative composition duration.
+
+#### Request Schema
+
+```json
+{
+  "model": "music-2.6",
+  "prompt": "80s synthwave, energetic beats, nostalgic drive along coastal highway",
+  "lyrics": "[Intro]\nDriving through the night lights\n[Chorus]\nElectric dreams never fade away\n[Outro]\nLost in the neon",
+  "is_instrumental": false,
+  "lyrics_optimizer": false,
+  "stream": false,
+  "output_format": "hex",
+  "audio_setting": {
+    "sample_rate": 44100,
+    "bitrate": 256000,
+    "format": "mp3"
+  }
+}
+```
+
+#### Parameter Details
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `prompt` | string | Required | Style, instrumentation, mood, and genre descriptions (max 2000 chars) |
+| `lyrics` | string | Optional | Song lyrics with structure tags (`[Intro]`, `[Verse]`, `[Chorus]`, `[Bridge]`, `[Outro]`) |
+| `is_instrumental` | boolean | `false` | When true, lyrics are ignored and purely instrumental music is generated |
+| `lyrics_optimizer` | boolean | `false` | When true and lyrics are empty, auto-generates appropriate lyrics based on prompt |
+| `audio_setting.format` | string | `mp3` | `mp3`, `wav`, `pcm` |
+| `audio_setting.sample_rate` | integer | `44100` | Recommended 44.1 kHz for high-fidelity audio |
+| `audio_setting.bitrate` | integer | `256000` | Recommended 256 kbps |
+
+#### Response Schema
+
+```json
+{
+  "base_resp": {
+    "status_code": 0,
+    "status_msg": "success"
+  },
+  "data": {
+    "audio": "49443304000000...",
+    "status": 2
+  },
+  "extra_info": {
+    "music_duration": 60.0
+  },
+  "trace_id": "0289ab723f1122"
+}
+```
+
+---
+
+### 3.4. Chat & Text Generation
+
+- **Endpoint**: `POST /v1/text/chatcompletion_v2`
+- **Supported Models**:
+  - `MiniMax-M2.7`: Primary recommended model for reasoning and conversational fidelity.
+  - `MiniMax-Text-01`: High-throughput foundational text model.
+  - `abab6.5s-chat`: MoE architecture conversational model.
+
+#### Request Schema
+
+```json
+{
+  "model": "MiniMax-M2.7",
+  "messages": [
+    { "role": "system", "content": "You are a creative multimodal production assistant." },
+    { "role": "user", "content": "Draft three music prompts for a cyberpunk documentary soundtrack." }
+  ],
+  "temperature": 0.7,
+  "top_p": 0.95,
+  "max_tokens": 4096
+}
+```
+
+#### Response Schema
+
+```json
+{
+  "base_resp": {
+    "status_code": 0,
+    "status_msg": "success"
+  },
+  "model": "MiniMax-M2.7",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Here are three cinematic cyberpunk soundtrack ideas..."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 28,
+    "completion_tokens": 142,
+    "total_tokens": 170
+  }
+}
+```
+
+---
+
+### 3.5. Lyric Generation Assistant
+
+- **Endpoint**: `POST /v1/lyrics_generation`
+- **Modes**:
+  - `write_full_song`: Creates complete structured song lyrics from topic/genre prompt.
+  - `edit`: Rewrites, continues, or refines an existing lyrics draft.
+
+#### Request Schema
+
+```json
+{
+  "mode": "write_full_song",
+  "prompt": "A melancholic acoustic ballad about autumn leaves in Tokyo",
+  "title": "Tokyo Rain"
+}
+```
+
+#### Response Schema
+
+```json
+{
+  "base_resp": {
+    "status_code": 0,
+    "status_msg": "success"
+  },
+  "song_title": "Tokyo Rain",
+  "style_tags": "Acoustic, Melancholic, Ballad",
+  "lyrics": "[Verse 1]\nGolden leaves on Shibuya crossway...\n[Chorus]\nWash away the shadows in the rain..."
+}
+```
+
+---
+
+### 3.6. Video Generation (Architectural Roadmap)
+
+- **Target Endpoints**:
+  - Dispatch: `POST /v1/video_generation`
+  - Polling Query: `GET /v1/query/video_generation?task_id={id}`
+- **Models**: `video-01`
+- **Asynchronous Execution Pattern**:
+  1. Client sends prompt, aspect ratio (`16:9`, `9:16`, `1:1`), duration, and optional first frame / last frame images.
+  2. MiniMax returns `task_id` with `status: "Processing"`.
+  3. Client polls query endpoint with exponential backoff (e.g. 5s interval, 10-minute cap).
+  4. On `status: "Success"`, MiniMax returns signed downloadable MP4 URL.
+
+---
+
+## 4. Error Handling and Status Codes
+
+MiniMax APIs standardize return status in `base_resp`:
+
+| Status Code | Message | Description & Recovery Guidance |
+|---|---|---|
+| `0` | `请求成功` | Operation completed successfully |
+| `1000` | `未知错误` | Internal MiniMax service fault; retry with exponential backoff |
+| `1001` | `超时` | Generation task exceeded timeout limit; check network or payload complexity |
+| `1002` | `触发限流，请稍后再试` | Rate limiting triggered; delay subsequent requests |
+| `1004` | `账号鉴权失败，请检查 API Key` | Invalid, expired, or missing MiniMax API key |
+| `1008` | `账号余额不足` | Account has exhausted quota or credit balance |
+| `1026` | `内容涉及敏感信息` | Prompt or output triggered content moderation filter |
+| `1039` | `触发 TPM 限流` | Tokens-per-minute threshold reached; throttle concurrent client generation |
+| `1042` | `非法字符超过 10%` | Input text contains excessive unparseable or corrupted characters |
+| `2013` | `参数异常，请检查输入` | Malformed parameters, out-of-range bounds, or invalid JSON |
+| `2049` | `无效的 API Key` | Authorization header malformed or key revoked |
+
+---
+
+## 5. Security & Deployment Architecture
+
+### Direct Mode vs. Production Backend
+
+| Attribute | Direct Browser Mode (Current) | Production Backend Mode (Target) |
+|---|---|---|
+| **Credential Storage** | Browser `localStorage` (`minimax_api_key`) | Server-side environment variables (`MINIMAX_API_KEY`) |
+| **Network Path** | Browser -> `api.minimaxi.com` directly | Browser -> Application Backend -> `api.minimaxi.com` |
+| **CORS Dependency** | Relies on MiniMax CORS headers | First-party domain requests; no third-party CORS issues |
+| **Quota Enforcement** | None (client can spend entire key balance) | Server-side user tiers, daily allowances, rate limiting |
+| **Authentication** | None (single-user local testing) | JWT access/refresh tokens with bcrypt password hashing |
+| **Security Scope** | Suitable ONLY for local development / testing | Suitable for multi-user public web deployments |
+
+### Static Pages Publication Boundary
+
+The repository includes an explicit static build harness to protect sensitive data:
+- **Build script**: `scripts/build_pages.py`
+- **Published Asset Allowlist** (10 files strictly):
+  1. `index.html`
+  2. `css/styles.css`
+  3. `css/themes.css`
+  4. `js/polyfills.js`
+  5. `js/models.js`
+  6. `js/utils.js`
+  7. `js/templates.js`
+  8. `js/api.js`
+  9. `js/backend-api.js`
+  10. `js/app.js`
+- **Guaranteed Isolation**:
+  - The script refuses to build if `_site` already exists, avoiding stale residue.
+  - Symlinks pointing outside or inside are strictly rejected.
+  - SQLite database files (`server/data/*.db`), test scripts, screenshots, and `.env` files are excluded from distribution.
+
+---
+
+## 6. Repository Verification & Test Suite
+
+### Running the Validation Tests
+
+The project includes dependency-free Python unit tests to verify repository hygiene and static build confinement:
+
+```bash
+# Execute unit tests from project root
+python3 -m unittest discover -s tests -v
+
+# Generate fresh static deployment artifact
+python3 scripts/build_pages.py
+```
+
+### Verified Test Cases in `tests/test_pages_build.py`
+
+- `test_only_explicit_public_files_are_copied`: Validates that private databases, node modules, and credentials are never placed into `_site`.
+- `test_missing_asset_fails_before_creating_output`: Ensures missing critical assets fail closed without emitting partial builds.
+- `test_symlinked_asset_is_rejected`: Rejects symlinked files.
+- `test_symlinked_asset_directory_is_rejected`: Rejects directory traversal via symlinks.
+- `test_existing_output_cannot_leak_stale_files`: Confirms fail-fast behavior if target directory exists.
+- `test_output_symlink_is_rejected`: Prevents writing through symlinked output paths.
+- `test_frontend_references_are_in_allowlist`: Confirms all static resource URLs in `index.html` match the allowlist.
+- `test_runtime_databases_are_not_tracked`: Ensures git index does not track database artifacts.
+- `test_public_server_serves_assets_but_not_private_paths`: Runs an isolated HTTP server and verifies that private endpoints return 404 while allowlisted assets return 200.
+
+---
+
+## 7. Developer & Agent Integration Runbook
+
+### Key Integration Rules
+
+1. **Do Not Synthesize Missing Backend**: Never invent `npm start` or assume `server/server.js` exists until explicitly recovered from a verified historical commit.
+2. **Never Expose Direct Mode to Public Endpoints**: Do not configure GitHub Pages or public domains to automatically load keys or invite public users to input production credentials.
+3. **Use Mock Verification for Media**: When developing features or running browser test automation (e.g. Puppeteer), intercept network requests to mock API responses instead of expending live MiniMax generation quota.
+4. **Archive Protocol**: If no trusted backend recovery is achieved within maintenance window and live API contracts change, archive the repository as an educational prototype.
