@@ -2,28 +2,33 @@
 
 [![llms.txt](https://img.shields.io/badge/llms.txt-available-blue)](llms.txt)
 
-> **Status: Voice-production candidate; real MiniMax use still requires account verification**
+> **Status: Voice-production candidate; legacy multimodal workbench remains partial**
 >
-> This branch provides a runnable local recording workflow and a guarded MiniMax
-> adapter. Live-provider compatibility and browser visual acceptance remain open.
+> The local recording workflow and guarded speech adapter are implemented and
+> synthetic-tested. Real-browser and live-provider acceptance remain open.
 
 MiniMax Studio retains its original creative-workbench identity. The legacy
 multimodal experiment remains separate from the new dialogue workflow.
 
-## Current tree clarification — 2026-10-07
+## Current tree clarification — 2026-11-15
 
-The root and `server/package.json` manifests exist. The root manifest now includes
-fixture tests and build commands alongside Puppeteer development tooling. The
-legacy `server/server.js` entrypoint is still absent; the new local dialogue
-service does not recover the legacy multimodal backend. That legacy experiment
-remains in maintenance mode, with its archive decision pending.
+Reviewed `main` at `5d57027b4b91743e01795f7e0b00f547bd5f952a`.
+Root and server manifests and lockfiles exist. The root manifest provides fixture,
+DOM and browser test scripts, builds and a local dialogue-service command.
+The legacy `server/server.js` entrypoint and corresponding business routes remain
+absent. The new `server/dialogue-server.mjs` does not recover that backend.
+
+The legacy image, speech, music and lyrics frontend dispatch/render paths exist,
+but were not live-provider-verified by this review. Chat has navigation,
+configuration and an API helper but is not connected through the application's
+generation/result branches. Video has no implemented create/poll/result flow in
+the reviewed workbench. Do not treat the repository description as a feature pass.
+The legacy experiment remains in maintenance mode, with its archive decision open.
 
 Use the [project maintenance skill](.agents/skills/minimax-studio-maintenance/SKILL.md)
-to distinguish Direct Mode, mock browser evidence and actual backend/provider
-results. Its 2026-10-03 source map predates this voice-production candidate;
-check the current files and scripts rather than treating that snapshot as a
-runtime or deployment pass. Neither this merge nor synthetic tests verify live
-MiniMax generation or browser acceptance.
+and [maintenance ledger](docs/MAINTENANCE.md) to distinguish the legacy Direct/Backend
+experiment, offline voice workspace and guarded local speech service. Source,
+fixture/CI, browser, live-provider and publication evidence are separate.
 
 ## Start the voice workspace
 
@@ -33,9 +38,10 @@ With Node 20+, no runtime installation or credentials:
 node server/dialogue-server.mjs
 ```
 
-Open the exact localhost URL it prints. Generation starts disabled. Import CSV,
-configure cast voices, attach real WAV recordings, listen, approve/reject takes,
-and export a validated audio package. A standalone HTML build is also available:
+Open the exact loopback URL it prints (`127.0.0.1`, not an interchangeable host).
+Generation starts disabled. Import CSV, configure cast voices, attach real WAV
+recordings, listen, approve/reject takes, and export a validated audio package.
+A standalone HTML build is also available:
 
 ```sh
 python3 scripts/build_offline.py /new/path/MiniMax_Studio_Voice_Workspace.html
@@ -49,24 +55,28 @@ the key never goes in the frontend or a public deployment. See
 
 ## AI Search & LLM Context
 
-Machine-readable architectural specifications and API documentation adhering to [llmstxt.org](https://llmstxt.org) standards:
-- [`llms.txt`](llms.txt): Concise project context, multimodal API capabilities, architecture, and security boundaries.
-- [`llms-full.txt`](llms-full.txt): Complete technical specification, request/response payload schemas, error codes, and audit references.
+Machine-readable project context is available in [`llms.txt`](llms.txt) and
+[`llms-full.txt`](llms-full.txt). Historical capability/API descriptions in these
+summaries are not delivery evidence; current source and the dated
+[maintenance ledger](docs/MAINTENANCE.md) take precedence.
 
 ## Current audit status
 
-Reconciled main `e061f760ec5218d9c0985572c4c242559f4b31d7` with voice candidate
-`e1347b36a6648c27c607f901399031ce9d5b5d89` on 2026-10-07:
+The existing [2026-11-11 CI run](https://github.com/Luckycat133/minimax-studio/actions/runs/43038517951)
+for the reviewed SHA passed root `npm ci --ignore-scripts`, 81 Node tests,
+33 DOM tests, 10 Python tests, the 17-asset build, and Pages deployment.
+These are inspected existing CI results, not new local runs by this reviewer.
+The workflow does not invoke `npm run test:browser`; real-browser layout,
+playback/downloads and live MiniMax use remain unverified by this review.
+The install log also reported four high-severity dependency vulnerabilities,
+which need scoped triage rather than an assumption that successful CI is clean.
 
-- root and server package manifests both exist; older audit claims that they are
-  missing are stale;
-- `server/server.js` and the backend business source are still absent;
-- historical dependency trees are still tracked;
-- the recording workflow and guarded local service have synthetic-only tests that never consume quota;
-- the legacy live text/image/video/speech/music flows remain unverified.
-
-Legacy Backend Mode cannot be honestly documented as runnable. Historical context remains
-in [REPOSITORY_AUDIT.md](REPOSITORY_AUDIT.md) and [issue #2](https://github.com/Luckycat133/minimax-studio/issues/2).
+Both manifests and lockfiles are present. Root/server dependency directories and
+runtime databases are absent from the reviewed current trees; this is not a
+history purge. The guarded local service has synthetic provider and actual
+loopback HTTP tests, but is not the missing legacy business backend. Historical
+context is retained in [REPOSITORY_AUDIT.md](REPOSITORY_AUDIT.md) and
+[issue #2](https://github.com/Luckycat133/minimax-studio/issues/2).
 
 ## Direct Mode warning
 
@@ -77,23 +87,29 @@ Opening `index.html` may expose the direct browser experiment, but Direct Mode i
 - requests are sent directly to MiniMax;
 - model names and API contracts may be stale.
 
-Do not enter a valuable key into the legacy experiment. Do not deploy Direct Mode as a public shared site. The new offline workflow does not read or use those legacy credentials.
+Do not enter a valuable key into the legacy experiment. Do not deploy Direct Mode
+as a public shared service. The current Pages artifact still includes the legacy
+entrypoint: its file allowlist does not disable Direct Mode or secure browser-held
+keys. The new offline workflow does not read or use those legacy credentials.
 
-## Remaining legacy multimodal work
+## Remaining development work
 
-1. Recover and verify the backend source from a trusted copy; the manifests already exist.
-2. Commit lockfiles and verify `npm ci`.
-3. Make Backend Mode the verified default.
-4. Add mock tests for text/image/video/speech/music flows, timeouts, cancellation, polling backoff, and download recovery.
-5. Record the MiniMax model-list source and verification date.
-6. Remove tracked dependency trees and, after backup, clean them from history.
+The detailed priorities and closure criteria are in [MAINTENANCE.md](docs/MAINTENANCE.md).
+
+1. Complete real-browser fixture acceptance of the voice workflow, then perform a separately authorized, bounded live speech trial if in scope.
+2. Make legacy capability/mode reporting truthful; wire and test Chat or visibly disable it, and do not advertise video as delivered.
+3. Separate safe read retries from generation POSTs, bound token-expiry replay and fix 401 response parsing. The existing reconnect map is not a working recovery queue.
+4. Fix legacy restored-audio and response-body timeout handling, with fake-key media and download regressions.
+5. Decide explicitly whether to recover trusted legacy backend source or build a reviewed local multimodal service. Existing lockfiles and the dialogue service do not settle that decision.
+6. Triage the logged dependency findings. Keep current-tree hygiene separate from any separately authorized, backed-up history cleanup.
 
 ## Static Pages publication boundary
 
 GitHub Pages packages only the 17 explicitly allowlisted frontend files listed in
-`scripts/build_pages.py`. The workflow never uploads the
-repository root, backend, runtime data, dependencies, screenshots, or local settings.
-New public assets require an explicit allowlist change.
+`scripts/build_pages.py`. The workflow never uploads the repository root, backend,
+runtime data, dependencies, screenshots, or local settings. New public assets
+require an explicit allowlist change. The local dialogue service is not deployed
+by Pages.
 
 Validate and prepare a fresh artifact with Python 3 (no npm install or API key needed):
 
@@ -107,13 +123,15 @@ published. Use a fresh checkout for each build. Pull requests validate and packa
 the artifact; only the protected `main` branch can deploy it. Existing review and
 Pages environment protections still apply.
 
-Runtime database files are ignored and no longer tracked in new commits. This
-does **not** remove previous copies from public Git history, old artifacts, caches,
-or downloads, and does not establish whether they contained sensitive data.
-After the approved merge and successful Pages deployment, verify that the site
-and its CSS/JavaScript still load and that a HEAD request to
-`server/data/minimax.db` returns 404. Until then, the previous site remains live.
-This publication fix does not resolve the Direct Mode or backend limitations above.
+The audited main revision's build and deployment succeeded on 2026-11-11. This
+review did not repeat live-site checks: loading the published HTML/CSS/JavaScript
+and checking that `HEAD server/data/minimax.db` returns 404 remain separate smoke
+steps. An isolated CI server's 404 is not evidence about the current public site.
+
+Runtime database files are ignored and absent from the current tracked tree.
+This does **not** remove copies from public Git history, old artifacts, caches or
+downloads, or establish whether they contained sensitive data. Artifact isolation
+does not resolve the Direct Mode, legacy backend or feature limitations above.
 
 ## License
 
