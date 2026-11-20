@@ -4,12 +4,13 @@ from functools import partial
 from html.parser import HTMLParser
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import threading
 import unittest
 from urllib.error import HTTPError
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 from urllib.request import Request, urlopen
 
 from scripts.build_pages import PUBLIC_FILES, build_pages
@@ -72,6 +73,24 @@ class PagesBuildTests(unittest.TestCase):
                 self.assertEqual((self.output / reference).read_bytes(),
                                  (ROOT / reference).read_bytes())
         self.assertFalse((self.output / "server").exists())
+
+    def test_public_llm_index_links_resolve_within_pages(self):
+        build_pages(ROOT, self.output)
+        root = self.output.resolve()
+        index = root / "llms.txt"
+        relative_links = set()
+        for href in re.findall(r"\[[^\]\n]+\]\(([^)\s]+)\)", index.read_text()):
+            url = urlsplit(href)
+            if url.scheme or url.netloc or not url.path:
+                continue
+            with self.subTest(href=href):
+                relative = unquote(url.path)
+                target = (index.parent / relative).resolve()
+                self.assertFalse(relative.startswith("/"), "Pages can be hosted under a repository subpath")
+                self.assertTrue(target.is_relative_to(root), "Link escapes the Pages bundle")
+                self.assertTrue(target.is_file(), "Linked asset is not in the Pages bundle")
+                relative_links.add(relative)
+        self.assertIn("llms-full.txt", relative_links)
 
     def test_missing_asset_fails_before_creating_output(self):
         (self.source / "js/app.js").unlink()

@@ -56,10 +56,10 @@ MiniMax Studio is an open-source web application designed as an experimental int
 
 ## Optional
 
-Links other than the full LLM reference identify source repository files; they are not shipped by the static Pages build.
+The full LLM reference is part of the Pages bundle. The other links go directly to public source files on GitHub. Historical reports describe their own snapshots, not the current deployment or model availability.
 
 - [Full LLM Documentation](llms-full.txt): Complete technical specification, API payloads, response structures, and codebase audit.
-- [Repository Audit](REPOSITORY_AUDIT.md): Detailed reproducibility and architectural audit log.
-- [Project Maintenance Skill](.agents/skills/minimax-studio-maintenance/SKILL.md): Operational guide for direct/backend mode inspection and media testing.
-- [Browser Test Report](BROWSER_TEST_REPORT.md): Automated Puppeteer verification results and screenshots.
-- [Project README](README.md): Primary repository overview and static pages publication guide.
+- [Historical Repository Audit (July 2026)](https://raw.githubusercontent.com/Luckycat133/minimax-studio/5d57027b4b91743e01795f7e0b00f547bd5f952a/REPOSITORY_AUDIT.md): Historical reproducibility and architecture findings. For current package-manifest and backend status, read the project README.
+- [Project Maintenance Skill](https://raw.githubusercontent.com/Luckycat133/minimax-studio/main/.agents/skills/minimax-studio-maintenance/SKILL.md): Operational guide for direct/backend mode inspection and media testing.
+- [Historical Browser Test Report](https://raw.githubusercontent.com/Luckycat133/minimax-studio/5d57027b4b91743e01795f7e0b00f547bd5f952a/BROWSER_TEST_REPORT.md): Earlier Puppeteer results and screenshots, not acceptance of the current candidate.
+- [Project README](https://raw.githubusercontent.com/Luckycat133/minimax-studio/main/README.md): Primary repository overview and static pages publication guide.
