@@ -8,6 +8,8 @@ import shutil
 PUBLIC_FILES = (
     "index.html",
     "dialogue.html",
+    "llms.txt",
+    "llms-full.txt",
     "css/dialogue.css",
     "js/dialogue.mjs",
     "js/dialogue-core.mjs",

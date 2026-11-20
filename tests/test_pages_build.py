@@ -65,6 +65,14 @@ class PagesBuildTests(unittest.TestCase):
             self.assertEqual((self.output / relative).read_bytes(),
                              (self.source / relative).read_bytes())
 
+    def test_public_llm_references_match_root_source(self):
+        build_pages(ROOT, self.output)
+        for reference in ("llms.txt", "llms-full.txt"):
+            with self.subTest(reference=reference):
+                self.assertEqual((self.output / reference).read_bytes(),
+                                 (ROOT / reference).read_bytes())
+        self.assertFalse((self.output / "server").exists())
+
     def test_missing_asset_fails_before_creating_output(self):
         (self.source / "js/app.js").unlink()
         with self.assertRaises(FileNotFoundError):
@@ -100,7 +108,7 @@ class PagesBuildTests(unittest.TestCase):
         parser = AssetReferences()
         for page in ("index.html", "dialogue.html"):
             parser.feed((ROOT / page).read_text())
-        self.assertEqual(parser.paths, set(PUBLIC_FILES) - {"index.html", "dialogue.html", "js/dialogue-core.mjs", "js/production-core.mjs", "js/production-storage.mjs", "js/production-queue.mjs"})
+        self.assertEqual(parser.paths, set(PUBLIC_FILES) - {"index.html", "dialogue.html", "llms.txt", "llms-full.txt", "js/dialogue-core.mjs", "js/production-core.mjs", "js/production-storage.mjs", "js/production-queue.mjs"})
         self.assertIn("./dialogue-core.mjs", (ROOT / "js/dialogue.mjs").read_text())
 
     def test_runtime_databases_are_not_tracked(self):
