@@ -12,8 +12,8 @@ MiniMax Studio is an open-source multimodal generative AI studio designed for we
 
 - **Repository Status**: Maintenance Mode (decision pending archive / backend recovery).
 - **Current Operational Profile**: Direct Browser Client mode (`index.html`) using client-provided API keys against MiniMax Open API endpoints (`https://api.minimaxi.com`).
-- **Backend Status**: Backend server entry point (`server/server.js`) is unrecovered; backend mode is non-functional without restoring the server implementation.
-- **Production Guardrails**: The root project must not be hosted publicly in Direct Mode with shared credentials. A static deployment boundary exists for GitHub Pages (`scripts/build_pages.py`) that strictly packages 10 allowlisted frontend files and prevents leakage of databases or private environment configuration.
+- **Backend Status**: Backend server entry point (`server/server.js`) is unrecovered; the legacy multimodal backend is non-functional without restoring its implementation. The separate local voice workspace can run with `node server/dialogue-server.mjs`; it starts with generation disabled, and its local service is not shipped in the Pages artifact.
+- **Production Guardrails**: The root project must not be hosted publicly in Direct Mode with shared credentials. A static deployment boundary exists for GitHub Pages (`scripts/build_pages.py`) that strictly packages 19 allowlisted frontend and documentation files and prevents leakage of databases or private environment configuration.
 
 ---
 
@@ -436,17 +436,26 @@ MiniMax APIs standardize return status in `base_resp`:
 
 The repository includes an explicit static build harness to protect sensitive data:
 - **Build script**: `scripts/build_pages.py`
-- **Published Asset Allowlist** (10 files strictly):
+- **Published Asset Allowlist** (19 files strictly, authoritative list in `scripts/build_pages.py`):
   1. `index.html`
-  2. `css/styles.css`
-  3. `css/themes.css`
-  4. `js/polyfills.js`
-  5. `js/models.js`
-  6. `js/utils.js`
-  7. `js/templates.js`
-  8. `js/api.js`
-  9. `js/backend-api.js`
-  10. `js/app.js`
+  2. `dialogue.html`
+  3. `llms.txt`
+  4. `llms-full.txt`
+  5. `css/dialogue.css`
+  6. `js/dialogue.mjs`
+  7. `js/dialogue-core.mjs`
+  8. `js/production-core.mjs`
+  9. `js/production-storage.mjs`
+  10. `js/production-queue.mjs`
+  11. `css/styles.css`
+  12. `css/themes.css`
+  13. `js/polyfills.js`
+  14. `js/models.js`
+  15. `js/utils.js`
+  16. `js/templates.js`
+  17. `js/api.js`
+  18. `js/backend-api.js`
+  19. `js/app.js`
 - **Guaranteed Isolation**:
   - The script refuses to build if `_site` already exists, avoiding stale residue.
   - Symlinks pointing outside or inside are strictly rejected.
