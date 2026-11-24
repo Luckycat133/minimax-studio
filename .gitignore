@@ -37,6 +37,9 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
+# Local agent settings (per-machine, never commit)
+.claude/settings.local.json
+
 # Editor
 .vscode/
 .idea/
