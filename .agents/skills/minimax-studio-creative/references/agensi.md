@@ -1,0 +1,28 @@
+# Generate media through Agensi
+
+Use the signed-in Agensi MCP tools exposed by the host. Agensi runs the models on its own provider accounts and charges the user's Agensi balance separately from the price of a marketplace Skill. For a loaded Agensi listing, inspect its enabled tools with `skill_tools` and supply its actual slug when the live schema calls for it. For a local invocation using Agensi directly, omit `skill_slug`. [Agensi tools reference](https://www.agensi.io/docs/tools) · [Tools for creators](https://www.agensi.io/docs/what-you-can-sell)
+
+## Select tools and validate inputs
+
+Use `find_tools` to search by provider and task, then look up each selected tool by the returned ID. Read the live parameter schema, supported formats, size and duration limits, output types and pricing units. Resolve tool IDs and options fresh for the current run. Public catalogue names are search terms. [MiniMax catalogue](https://www.agensi.io/tools/minimax)
+
+| Need | Choose and verify |
+| --- | --- |
+| Key visual, cover or storyboard still | Search for MiniMax `image-01`. The public listing describes text-to-image. Check aspect ratio, size and result count in the live tool. If image editing or reference conditioning is required, discover an eligible tool that explicitly accepts it. |
+| Draft or final shot | Search for Hailuo `H3` and compare text-to-video, first/last-frame and multimodal reference modes. Consider H3 Max Turbo for draft shots that need only text or endpoint frames. Use a tier with explicit reference support for image, video or audio conditioning beyond those frames. Verify aspect, duration, resolution and reference limits per tool. |
+| Narration or character dialogue | Compare Speech 2.8 Turbo and HD for the required language and quality. Verify the selected voice, speed and pronunciation controls and output format. Use separate line or role requests when independent retakes matter. |
+| Music bed or song | Search for MiniMax Music and inspect the offered music-3.0 or music-2.6 options. Confirm instrumental or vocal mode, lyrics handling, supported output and usable duration. Request separate music audio when editing or mixing. |
+
+Submit references only in a form the selected tool accepts. For an accepted file handle, use the host's supported file transfer. For a URL input, use a user-authorized URL or a previous Agensi output URL if the selected tool can read it. A local path is usable only when the tool explicitly takes one. If reference transfer is unavailable, keep that step pending or offer a text-only or user-provided alternative with the change made clear. Avoid public uploads to make a private reference reachable. [Agensi tool discovery](https://www.agensi.io/docs/tools)
+
+## Quote, run and recover
+
+1. Call `quote_tool` with the actual planned inputs, options and output count. It is free. The documented batch limit is 100 uses of one tool per quote, with video quoted one at a time. Add quote maxima at their returned precision and show the total, line items and phase. If later calls depend on files that do not exist yet, provide exact quotes for the current phase and label the remainder as an estimate. Quote the remaining phase when its inputs are available. [Agensi tools reference](https://www.agensi.io/docs/tools)
+2. Run within the scope and maximum spend the user explicitly authorizes. For a project cap, add confirmed charges, the full quoted maxima of unresolved attempts, and the new quotes across phases and retakes. If that authority is missing or the planned work exceeds it, show the revised scope and maximum and obtain authorization before calling `run_tool`. Agensi can debit available balance immediately under its default settings. A balance top-up is a separate purchase. [Agensi tool charges](https://www.agensi.io/terms#48-agensi-tools)
+3. Submit each authorized quote once. Record the attempt and quoted maximum before dispatch, then record the returned job handle, state and any reported actual charge. Follow a pending handle with `check_job` until it reaches a terminal state or the tool or host cannot keep following it. On interruption resume with the same handle. If submission timed out without a handle, mark it uncertain and reconcile the available Agensi result and transaction records before considering a new run. Track the charge separately from the download status. Use a fresh quote for an intentional retake within the user's spending authority. [Jobs and balance tools](https://www.agensi.io/docs/tools)
+
+## Hand off verified files
+
+Save returned media to the designated workspace when the host supports authorized downloads. Read back the actual file and check that its content is usable for the requested media type before marking a local deliverable complete. Record the path, relevant media properties and reported charges. Keep private result links out of shared manifests and logs. Agensi documents seven-day result links and 30-day file availability in Dashboard → Balance. If saving is unavailable, report the result as remote-only and give the user the platform download route. Recover a missing download from the original job or Balance before considering generation again. [Media files and retention](https://www.agensi.io/tools)
+
+If the host lacks a signed-in connector, deliver the production plan, prompts, estimates clearly labeled as such, or a package of available user assets. A hosted Agensi Skill does not start the repository's local service. The public catalogue and tool documentation were checked on 2026-11-20. Signed-in schemas, live quotes, reference transfer, job recovery and media generation still need verification on the target host. [MCP connection and sign-in](https://www.agensi.io/docs/mcp-server)

@@ -1,30 +1,21 @@
 # Curated Project Skill Routing
 
-This repository keeps task-specific Skills in .agents/skills. Codex and Claude entry directories point to the same project-owned copies where links are present.
+This repository keeps task-specific Skills in `.agents/skills`. Codex (`.codex/skills`) and Claude (`.claude/skills`) entry directories symlink to the same project-owned copies.
 
-This table records the Skills reviewed or added by the 2026-09-11 audit; it does not remove or replace other project-owned Skills already present in the repository.
-
-Load only the Skill whose trigger matches the current task. A Skill may be reused by several projects, and this project may use several Skills. Existing repository instructions and the user's current request take priority over a Skill.
+Load only the Skill whose trigger matches the current task. Existing repository instructions (`AGENTS.md`, `README.md`) and the user's current request take priority over a Skill.
 
 | Skill | Use here for |
 |---|---|
-| `minimax-studio-maintenance` | Current missing backend entrypoint, mode detection, fake-key media mocks, retries and usable downloads |
-| `puppeteer-automation` | Existing browser automation workflow |
-| `github-actions` | Static publishing and security workflows |
-| `frontend-design` | Studio interface design |
-| `webapp-testing` | Local browser-flow verification |
-| `ui-ux-pro-max` | Searchable UX, accessibility, and interface guidance |
+| `minimax-studio-creative` | Use MiniMax MMX with a subscription key or Agensi, and create, revise, and deliver shared media projects |
+| `minimax-studio-maintenance` | Voice-production workspace (`dialogue.html`), loopback speech service (`server/dialogue-server.mjs`), packaging scripts (`build_pages.py`, `build_offline.py`), `node --test` / Puppeteer verification, and legacy workbench boundaries |
+| `puppeteer-automation` | Existing Puppeteer browser automation workflow (`tests/dialogue.browser.mjs`, `tests/legacy.browser.mjs`) |
+| `github-actions` | Static Pages publishing (`.github/workflows/static.yml`) and CodeQL security workflows |
+| `ui-ux-pro-max` (global) | Searchable UI/UX design, accessibility, and interface guidance via global skill (`~/.gemini/config/skills/ui-ux-pro-max`) |
 
 ## Maintenance rules
 
-- Keep domain and implementation Skills in the project instead of the global Codex Skill directory.
-- Preserve project-specific Skills as the source of truth; do not replace them with an archived global copy.
-- Prefer links for IDE-specific discovery so Codex and Claude read the same maintained content.
-- Add or expand a Skill only when it captures repeatable project knowledge that is not already clear from code or repository documentation.
+- Keep domain and implementation Skills in the project (`.agents/skills/`) instead of duplicating them in global directories.
+- Remove mismatched or duplicate local skills (for example, Playwright `webapp-testing` when this repo uses Puppeteer, or `frontend-design` covered by global `ui-ux-pro-max`).
+- Prefer symlinks in `.claude/skills/` and `.codex/skills/` so all tools read the same maintained source.
+- Add or expand a Skill only when it captures repeatable project knowledge not already obvious from code or repository documentation.
 - For small changes, run focused checks first and expand testing only when failures, risk, or new scope justify it.
-
-## Source-based routing update — 2026-10-03
-
-Start with the project-specific skill above for product/data/runtime work; load
-UI, testing or architecture specialists only when that narrower task needs them.
-The source maps record an inspection date, not a new runtime or deployment pass.

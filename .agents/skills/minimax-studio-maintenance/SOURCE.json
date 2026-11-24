@@ -1,0 +1,17 @@
+{
+  "origin": "Project-owned MiniMax Studio maintenance skill; existing tracked public entry updated against local source",
+  "upstream_entry": "https://github.com/Luckycat133/minimax-studio/blob/e061f760ec5218d9c0985572c4c242559f4b31d7/.agents/skills/minimax-studio-maintenance/SKILL.md",
+  "previous_entry_sha256": "2d3c72545073c8ce739517692e06944256a6175bfd9b48bdacfa435f692a5bef",
+  "local_change": "Route voice workspace and guarded speech service separately from legacy multimodal UI; retain legacy guidance on demand and avoid binary payload dumps.",
+  "local_files_sha256": {
+    "SKILL.md": "f640a7004fb1896232616b591c48bed701a2d3634752fcdd6f6b59f3449bea77",
+    "references/legacy-media.md": "809fd2d7c6ab68676c29e7e12773db411259be2bb1936be0e2773eda4909605b"
+  },
+  "verification": [
+    "Current script names and source paths checked",
+    "Legacy server/server.js remains absent; voice service exists",
+    "Relative links and Claude symlink checked",
+    "Skill validator and git diff --check passed",
+    "No service started, no model call or credentials accessed"
+  ]
+}
