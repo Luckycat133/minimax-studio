@@ -2,50 +2,68 @@
 
 [![llms.txt](https://img.shields.io/badge/llms.txt-available-blue)](llms.txt)
 
-> **Status: Voice-production candidate; real MiniMax use still requires account verification**
+> **Status: Voice-production candidate with local Chromium acceptance**
 >
-> This branch provides a runnable local recording workflow and a guarded MiniMax
-> adapter. Live-provider compatibility and browser visual acceptance remain open.
+> The local recording workflow passed Chromium import, playback, review and ZIP
+> round-trip checks with synthetic WAVs. Live MiniMax entitlement, generated
+> speech quality, billing and deployed Pages still need verification.
 
 MiniMax Studio retains its original creative-workbench identity. The legacy
 multimodal experiment remains separate from the new dialogue workflow.
 
-## Current tree clarification — 2026-10-07
+## Legacy workbench
 
-The root and `server/package.json` manifests exist. The root manifest now includes
-fixture tests and build commands alongside Puppeteer development tooling. The
-legacy `server/server.js` entrypoint is still absent; the new local dialogue
-service does not recover the legacy multimodal backend. That legacy experiment
-remains in maintenance mode, with its archive decision pending.
+The browser workbench has Direct Mode for image, speech, music and lyrics. It
+labels chat and video as unavailable. Saving a MiniMax API key stores it in the
+browser and does not contact MiniMax until a generation request.
 
-Use the [project maintenance skill](.agents/skills/minimax-studio-maintenance/SKILL.md)
-to distinguish Direct Mode, mock browser evidence and actual backend/provider
-results. Its 2026-10-03 source map predates this voice-production candidate;
-check the current files and scripts rather than treating that snapshot as a
-runtime or deployment pass. Neither this merge nor synthetic tests verify live
-MiniMax generation or browser acceptance.
+Backend Mode requires a same-origin `GET /api/health` returning HTTP 2xx and the
+JSON service identifier `minimax-studio-backend` with status `ok`. The legacy
+`server/server.js` and corresponding auth, generation and works service remain
+absent. The local voice service has its own `/api/dialogue/*` routes. The legacy
+media and Backend client were exercised with a loopback fixture.
+[Legacy workbench acceptance](docs/LEGACY_RETRY_AUTH_ACCEPTANCE.md).
 
 ## Start the voice workspace
 
 With Node 20+, no runtime installation or credentials:
 
 ```sh
+npm run dialogue
+# or directly:
 node server/dialogue-server.mjs
 ```
 
-Open the exact localhost URL it prints. Generation starts disabled. Import CSV,
+Open the exact localhost URL it prints (`dialogue.html` served with `/api/dialogue/*` routes backed by `server/dialogue-server.mjs` and `server/dialogue-provider.mjs`). Generation starts disabled. Import CSV,
 configure cast voices, attach real WAV recordings, listen, approve/reject takes,
 and export a validated audio package. A standalone HTML build is also available:
 
 ```sh
+npm run build:offline
+# or with a custom output path:
 python3 scripts/build_offline.py /new/path/MiniMax_Studio_Voice_Workspace.html
 ```
 
 This file supports the full local-recording workflow but cannot call MiniMax.
 Only an explicitly enabled, budgeted local service can make provider requests;
-the key never goes in the frontend or a public deployment. See
-[workflow instructions](OFFLINE_WORKFLOW.md) and the
-[provider integration guide](docs/PROVIDER_INTEGRATION.md).
+the key never goes in the frontend or a public deployment. See the
+[documentation index](docs/README.md),
+[workflow instructions](OFFLINE_WORKFLOW.md), the
+[provider integration guide](docs/PROVIDER_INTEGRATION.md), and the
+[browser QA runbook](docs/BROWSER_QA_RUNBOOK.md).
+
+## Scripts
+
+| Command | Description |
+|---------|-------------|
+| `npm run dialogue` | Start loopback-only voice workspace server (`node server/dialogue-server.mjs`) |
+| `npm test` | Run Node unit tests (`dialogue`, `production`, `dialogue-provider`, `dialogue-server`, `backend-api`) |
+| `npm run test:dom` | Run jsdom DOM tests (`tests/dialogue.dom.test.mjs`) |
+| `npm run test:browser` | Run Puppeteer Chromium tests for the voice workspace (`tests/dialogue.browser.mjs`) |
+| `npm run test:browser:legacy` | Run Puppeteer loopback fixture tests for the legacy workbench (`tests/legacy.browser.mjs`) |
+| `npm run build` | Build allowlisted GitHub Pages artifact into `_site` (`python3 scripts/build_pages.py`) |
+| `npm run build:offline` | Build standalone offline voice-workspace HTML (`python3 scripts/build_offline.py`) |
+| `python3 -m unittest discover -s tests -v` | Run Python packaging, offline build, and creative helper unit tests |
 
 ## AI Search & LLM Context
 
@@ -61,7 +79,7 @@ Reconciled main `e061f760ec5218d9c0985572c4c242559f4b31d7` with voice candidate
 - root and server package manifests both exist; older audit claims that they are
   missing are stale;
 - `server/server.js` and the backend business source are still absent;
-- historical dependency trees are still tracked;
+- root and `server/` `node_modules` were untracked from HEAD in `7cbcc4a` (historical commits still retain earlier copies until any history cleanup);
 - the recording workflow and guarded local service have synthetic-only tests that never consume quota;
 - the legacy live text/image/video/speech/music flows remain unverified.
 
@@ -114,6 +132,10 @@ After the approved merge and successful Pages deployment, verify that the site
 and its CSS/JavaScript still load and that a HEAD request to
 `server/data/minimax.db` returns 404. Until then, the previous site remains live.
 This publication fix does not resolve the Direct Mode or backend limitations above.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for version history (starting at `v0.1.0` through `v0.2.1`).
 
 ## License
 
