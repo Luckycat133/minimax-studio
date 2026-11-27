@@ -2,11 +2,17 @@
 
 ## Current execution status
 
-The latest attempt on 2026-10-06 at `cdfd2881` ended **BLOCKED_BEFORE_PAGE**:
+On 2026-11-15, Chrome 157.0.8103.51 on macOS passed all 17 checks in
+`npm run test:browser` against the local changes based on `5d57027`. The
+runner used Puppeteer 25.17.0. It exercised native playback, WAV and ZIP
+download, a restore in a fresh context, mobile layout, CSP and GET-only
+recovery across reload. Input audio was a synthetic tone and the test
+blocked unexpected external requests.
+
+The earlier attempt on 2026-10-06 at `cdfd2881` ended **BLOCKED_BEFORE_PAGE**.
 Chromium failed `socket()` with `EPERM` before opening a page. No browser scenario
-passed. The earlier CUA localhost route was also blocked; its cause is unconfirmed.
-Do not bypass either restriction. Queue-storage fixes at `dae040d532c609f8afcbd0de4fb6c73660e99684`
-have non-browser verification only; the supplemental acceptance below is **NOT RUN**.
+passed in that run. The separate supplemental queue-storage acceptance below
+still requires its own run.
 
 This test-only change must be applied on top of the reviewed player/service
 feedback fix from PR #13 (`01631e2448d056afd27d65f616247689d3ad8d65` or a descendant
@@ -18,7 +24,7 @@ the older UI that lacks those handlers.
 - An authorized cloud runner that permits the installed official Chromium to
   start and reach its own loopback servers, with writable temporary browser
   profiles, downloads and screenshots
-- Node 20+, Python 3, and the project's lockfile dependencies; no API key or
+- Node 22.12+, Python 3, and the project's lockfile dependencies; no API key or
   MiniMax account is required
 - A fresh output directory for each run, to avoid mistaking prior downloads or
   screenshots for this run's evidence
@@ -44,9 +50,8 @@ QA_OUTPUT_DIR="$(mktemp -d /tmp/minimax-browser-results-XXXXXX)" npm run test:br
 
 `npm ci --ignore-scripts` installs the lockfile test dependencies without browser
 downloads. It is unnecessary when the runner already has the same dependencies.
-The test launch uses the repository's existing browser flags unchanged. If the
-runner rejects browser launch or loopback access, stop and return the launch log;
-do not add new flags, alter security settings, use a tunnel, or move to a Mac.
+The test launch uses the browser flags in the repository. If a runner rejects
+browser launch or loopback access, retain its launch log and record the reason.
 
 ## Fixtures and flow contract
 

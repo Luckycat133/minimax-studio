@@ -6,11 +6,12 @@
   "devDependencies": {
     "fake-indexeddb": "^6.2.4",
     "jsdom": "^26.1.0",
-    "puppeteer": "^25.12.0"
+    "puppeteer": "^25.17.0"
   },
   "scripts": {
-    "test": "node --test tests/dialogue.test.mjs tests/production.test.mjs tests/dialogue-provider.test.mjs tests/dialogue-server.test.mjs",
+    "test": "node --test tests/dialogue.test.mjs tests/production.test.mjs tests/dialogue-provider.test.mjs tests/dialogue-server.test.mjs tests/backend-api.test.mjs",
     "test:browser": "node tests/dialogue.browser.mjs",
+    "test:browser:legacy": "node tests/legacy.browser.mjs",
     "build": "python3 scripts/build_pages.py",
     "test:dom": "node --test tests/dialogue.dom.test.mjs",
     "build:offline": "python3 scripts/build_offline.py",

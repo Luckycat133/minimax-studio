@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MiniMax Studio - 全模态 AI 创作平台</title>
+  <title>MiniMax Studio</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -22,7 +22,6 @@
           <span class="logo-icon">🦞</span>
           <div class="logo-text">
             <h1>MiniMax Studio</h1>
-            <p>全模态 AI 创作平台</p>
           </div>
         </div>
       </div>
@@ -36,28 +35,21 @@
           <span class="nav-icon">🎨</span>
           <div class="nav-text">
             <span class="nav-label">图片生成</span>
-            <span class="nav-desc">Image-01 · 50张/日</span>
+            <span class="nav-desc">Image-01</span>
           </div>
         </button>
         <button class="nav-item" data-model="speech">
           <span class="nav-icon">🎙️</span>
           <div class="nav-text">
             <span class="nav-label">语音合成</span>
-            <span class="nav-desc">Speech 2.8 · 4,000字符/日</span>
+            <span class="nav-desc">Speech 2.8</span>
           </div>
         </button>
         <button class="nav-item" data-model="music">
           <span class="nav-icon">🎵</span>
           <div class="nav-text">
             <span class="nav-label">音乐生成</span>
-            <span class="nav-desc">Music 2.6 · 100首/日</span>
-          </div>
-        </button>
-        <button class="nav-item" data-model="chat">
-          <span class="nav-icon">💬</span>
-          <div class="nav-text">
-            <span class="nav-label">AI 对话</span>
-            <span class="nav-desc">MiniMax M2.7 · 智能对话</span>
+            <span class="nav-desc">Music 2.6</span>
           </div>
         </button>
         <button class="nav-item" data-model="lyrics">
@@ -66,6 +58,20 @@
             <span class="nav-label">歌词生成</span>
             <span class="nav-desc">辅助工具 · 智能创作</span>
           </div>
+        </button>
+        <button class="nav-item" data-model="chat" disabled>
+          <span class="nav-icon" aria-hidden="true">💬</span>
+          <span class="nav-text">
+            <span class="nav-label">AI 对话</span>
+            <span class="nav-desc">暂不可用</span>
+          </span>
+        </button>
+        <button class="nav-item" data-model="video" disabled>
+          <span class="nav-icon" aria-hidden="true">🎬</span>
+          <span class="nav-text">
+            <span class="nav-label">视频生成</span>
+            <span class="nav-desc">暂不可用</span>
+          </span>
         </button>
       </nav>
 
@@ -98,9 +104,9 @@
           </div>
         </div>
         <div class="header-right">
-          <div class="api-status" id="api-status">
-            <span class="status-dot disconnected"></span>
-            <span>未登录</span>
+          <div class="api-status" id="api-status" role="status">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span>正在检查连接模式</span>
           </div>
         </div>
       </header>
@@ -111,7 +117,7 @@
           </div>
 
           <div class="action-bar">
-            <button class="btn btn-primary btn-generate" id="generate-btn">
+            <button class="btn btn-primary btn-generate" id="generate-btn" disabled>
               <span class="btn-icon">✨</span>
               <span>开始生成</span>
             </button>
@@ -135,25 +141,21 @@
 
   <div class="modal" id="apikey-modal">
     <div class="modal-backdrop" id="apikey-modal-backdrop"></div>
-    <div class="modal-content auth-modal-content">
+    <div class="modal-content auth-modal-content" role="dialog" aria-modal="true" aria-labelledby="apikey-title">
       <div class="auth-header">
-        <h2>🔑 配置 API Key</h2>
-        <button class="modal-close" id="apikey-modal-close">✕</button>
+        <h2 id="apikey-title">配置 MiniMax API Key</h2>
+        <button class="modal-close" id="apikey-modal-close" type="button" aria-label="关闭">✕</button>
       </div>
       <form class="auth-form" id="apikey-form">
         <div class="form-group">
-          <label class="form-label">MiniMax API Key</label>
-          <input type="password" class="form-input" id="apikey-input" placeholder="sk-xxx... 输入你的 MiniMax API Key" autocomplete="off">
+          <label class="form-label" for="apikey-input">MiniMax API Key</label>
+          <input type="password" class="form-input" id="apikey-input" autocomplete="off" required>
         </div>
-        <div class="form-group">
-          <label class="form-label">API 基础地址（可选）</label>
-          <input type="text" class="form-input" id="apikey-baseurl" placeholder="https://api.minimaxi.com" value="https://api.minimaxi.com">
-        </div>
-        <div class="auth-error" id="apikey-error"></div>
-        <button type="submit" class="btn btn-primary btn-block">确认连接</button>
+        <div class="auth-error" id="apikey-error" role="alert"></div>
+        <button type="submit" class="btn btn-primary btn-block">保存 API Key</button>
         <p style="color:var(--text-muted);font-size:12px;margin-top:12px;text-align:center;">
-          API Key 将保存在浏览器本地，不会上传到任何服务器。<br>
-          获取 API Key: <a href="https://platform.minimaxi.com/" target="_blank" rel="noopener" style="color:var(--accent-primary);">MiniMax 开放平台</a>
+          密钥保存在当前浏览器，生成请求会将它发送给 MiniMax。<br>
+          <a href="https://platform.minimaxi.com/" target="_blank" rel="noopener" style="color:var(--accent-primary);">前往 MiniMax 开放平台获取 API Key</a>
         </p>
       </form>
     </div>

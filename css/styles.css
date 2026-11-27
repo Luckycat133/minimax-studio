@@ -148,9 +148,14 @@ body {
   font-size: 14px;
 }
 
-.nav-item:hover {
+.nav-item:hover:not(:disabled) {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+.nav-item:disabled {
+  color: var(--text-muted);
+  cursor: default;
 }
 
 .nav-item.active {
@@ -438,6 +443,7 @@ body {
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
+  background: var(--text-muted);
 }
 
 .status-dot.connected {
@@ -1470,6 +1476,10 @@ body {
   cursor: pointer;
   transition: all var(--transition);
   text-align: left;
+}
+
+.dropdown-item[hidden] {
+  display: none;
 }
 
 .dropdown-item:hover {

@@ -25,19 +25,21 @@ class Templates {
     html += `<span class="result-title">🖼️ 生成结果（${imageCount} 张）</span>`;
     html += `<div class="result-actions">`;
     if (metadata) {
-      html += `<span class="result-action-btn">成功: ${metadata.success_count || imageCount}</span>`;
+      html += `<span class="result-action-btn">成功: ${Utils.sanitizeHtml(metadata.success_count ?? imageCount)}</span>`;
       if (metadata.failed_count > 0) {
-        html += `<span class="result-action-btn" style="color:var(--error)">失败: ${metadata.failed_count}</span>`;
+        html += `<span class="result-action-btn" style="color:var(--error)">失败: ${Utils.sanitizeHtml(metadata.failed_count)}</span>`;
       }
     }
     html += `</div></div>`;
     html += `<div class="image-grid">`;
     images.forEach((url, i) => {
+      const source = Utils.sanitizeHtml(url).replaceAll('"', '&quot;');
+      const extension = url.startsWith('data:image/jpeg;') ? 'jpg' : 'png';
       html += `<div class="image-card">
-        <img src="${Utils.sanitizeHtml(url)}" alt="Generated image ${i + 1}" loading="lazy">
+        <img src="${source}" alt="生成图片 ${i + 1}" loading="lazy">
         <div class="image-card-actions">
           <button class="result-action-btn" data-lightbox-index="${i}">🔍 查看</button>
-          <a class="result-action-btn" href="${Utils.sanitizeHtml(url)}" download="minimax_image_${i + 1}.png" target="_blank" rel="noopener">💾 下载</a>
+          <a class="result-action-btn" href="${source}" download="minimax_image_${i + 1}.${extension}" target="_blank" rel="noreferrer">💾 下载</a>
         </div>
       </div>`;
     });
@@ -45,20 +47,17 @@ class Templates {
     return html;
   }
 
-  static audioResult(audioSrc, audioFormat, modelType, info) {
+  static audioResult(audioFormat, modelType, info, remote) {
     let html = `<div class="result-header">`;
     html += `<span class="result-title">${modelType === 'speech' ? '🎙️' : '🎵'} 生成结果</span>`;
     html += `<div class="result-actions">`;
-    if (audioSrc) {
-      html += `<a class="result-action-btn" href="${audioSrc}" download="minimax_${modelType}.${Utils.sanitizeHtml(audioFormat)}" target="_blank" rel="noopener">💾 下载</a>`;
-    }
+    html += remote
+      ? '<a class="result-action-btn audio-download" target="_blank" rel="noreferrer">打开音频</a>'
+      : `<a class="result-action-btn audio-download" download="minimax_${modelType}.${audioFormat}">💾 下载</a>`;
     html += `</div></div>`;
     html += `<div class="audio-result">`;
-    if (audioSrc) {
-      html += `<audio class="audio-player" controls src="${audioSrc}"></audio>`;
-    } else {
-      html += `<p style="color:var(--text-muted);text-align:center;padding:20px;">音频生成中，请稍候...</p>`;
-    }
+    html += '<audio class="audio-player" controls></audio>';
+    html += '<div class="audio-playback-status" role="status"></div>';
 
     if (Object.keys(info).length > 0) {
       html += `<div class="audio-info">`;
@@ -67,13 +66,13 @@ class Templates {
         { key: 'audio_sample_rate', label: '采样率', format: v => `${v} Hz` },
         { key: 'audio_size', label: '文件大小', format: v => Utils.formatFileSize(v) },
         { key: 'bitrate', label: '比特率', format: v => `${Math.round(v / 1000)} kbps` },
-        { key: 'audio_format', label: '格式', format: v => v.toUpperCase() },
+        { key: 'audio_format', label: '格式', format: v => String(v).toUpperCase() },
         { key: 'usage_characters', label: '计费字符', format: v => v },
         { key: 'music_duration', label: '音乐时长', format: v => Utils.formatTime(v) }
       ];
       infoFields.forEach(({ key, label, format }) => {
         if (info[key] != null) {
-          html += `<div class="audio-info-item"><span class="audio-info-label">${label}</span><span class="audio-info-value">${format(info[key])}</span></div>`;
+          html += `<div class="audio-info-item"><span class="audio-info-label">${label}</span><span class="audio-info-value">${Utils.sanitizeHtml(format(info[key]))}</span></div>`;
         }
       });
       html += `</div>`;
@@ -202,20 +201,20 @@ class Templates {
       </div>
       <div class="works-list" id="works-list">
         ${works.map(work => `
-          <div class="work-item" data-id="${work.id}" data-type="${work.work_type}">
-            <div class="work-icon">${typeIcons[work.work_type] || '📄'}</div>
+          <div class="work-item" data-id="${encodeURIComponent(work.id)}">
+            <div class="work-icon">${Object.hasOwn(typeIcons, work.work_type) ? typeIcons[work.work_type] : '📄'}</div>
             <div class="work-info">
               <div class="work-title">${Utils.sanitizeHtml(work.title || (work.prompt ? work.prompt.substring(0, 50) : '未命名'))}</div>
               <div class="work-meta">
-                <span>${typeLabels[work.work_type] || work.work_type}</span>
+                <span>${Utils.sanitizeHtml(Object.hasOwn(typeLabels, work.work_type) ? typeLabels[work.work_type] : work.work_type)}</span>
                 <span>${new Date(work.created_at).toLocaleDateString('zh-CN')}</span>
                 ${work.is_favorite ? '<span class="work-favorite-badge">⭐ 收藏</span>' : ''}
               </div>
             </div>
             <div class="work-actions">
-              <button class="work-action-btn" onclick="app.toggleFavorite(${work.id}, ${!work.is_favorite})">${work.is_favorite ? '⭐' : '☆'}</button>
-              <button class="work-action-btn" onclick="app.viewWork(${work.id})">查看</button>
-              <button class="work-action-btn delete" onclick="app.deleteWork(${work.id})">删除</button>
+              <button class="work-action-btn" data-work-action="favorite" data-favorite="${!work.is_favorite}" aria-label="${work.is_favorite ? '取消收藏' : '收藏'}">${work.is_favorite ? '⭐' : '☆'}</button>
+              <button class="work-action-btn" data-work-action="view">查看</button>
+              <button class="work-action-btn delete" data-work-action="delete">删除</button>
             </div>
           </div>
         `).join('')}

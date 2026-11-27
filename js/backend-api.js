@@ -7,12 +7,12 @@ class BackendAPI {
     this.csrfToken = '';
     this.csrfSession = '';
     this.user = null;
-    this._isRefreshing = false;
-    this._refreshSubscribers = [];
+    this._authSession = { version: 0, refresh: null };
     this._online = navigator.onLine;
     this._pendingRequests = new Map();
     this._maxRetries = 3;
     this._retryDelay = 1000;
+    this._requestTimeout = 120000;
 
     window.addEventListener('online', () => {
       this._online = true;
@@ -28,9 +28,8 @@ class BackendAPI {
 
   async _fetchCsrfToken() {
     try {
-      const response = await fetch(`${API_BASE}/api/csrf-token`);
-      const data = await response.json();
-      if (data.success) {
+      const { response, data } = await this._readJSON('/api/csrf-token');
+      if (response.ok && data?.success) {
         this.csrfToken = data.data.csrfToken;
         this.csrfSession = data.data.sessionId;
       }
@@ -40,19 +39,21 @@ class BackendAPI {
   }
 
   setToken(accessToken, refreshToken) {
+    this._authSession = { version: 0, refresh: null };
+    this._storeTokens(accessToken, refreshToken);
+  }
+
+  _storeTokens(accessToken, refreshToken) {
     this.token = accessToken;
-    localStorage.setItem('auth_token', accessToken);
-    if (refreshToken) {
-      this.refreshToken = refreshToken;
-      localStorage.setItem('refresh_token', refreshToken);
-    }
+    this.refreshToken = refreshToken || '';
+    if (this.token) localStorage.setItem('auth_token', this.token);
+    else localStorage.removeItem('auth_token');
+    if (this.refreshToken) localStorage.setItem('refresh_token', this.refreshToken);
+    else localStorage.removeItem('refresh_token');
   }
 
   clearToken() {
-    this.token = '';
-    this.refreshToken = '';
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('refresh_token');
+    this.setToken('', '');
   }
 
   getHeaders() {
@@ -78,78 +79,101 @@ class BackendAPI {
     this._pendingRequests.clear();
   }
 
-  async _requestWithRetry(path, options, retryCount) {
-    try {
-      return await this._executeRequest(path, options);
-    } catch (error) {
-      if (retryCount < this._maxRetries && error.status >= 500) {
-        const delay = this._retryDelay * Math.pow(2, retryCount);
-        await new Promise(r => setTimeout(r, delay));
-        return this._requestWithRetry(path, options, retryCount + 1);
-      }
-      throw error;
-    }
-  }
-
-  _onTokenRefreshed(newToken) {
-    this._refreshSubscribers.forEach(cb => cb(newToken));
-    this._refreshSubscribers = [];
-  }
-
-  _addRefreshSubscriber(callback) {
-    this._refreshSubscribers.push(callback);
-  }
-
-  async _tryRefreshToken() {
+  async _tryRefreshToken(session, version) {
+    if (this._authSession !== session) return false;
+    // Another request may already have refreshed the token used by this one.
+    if (session.version !== version) return true;
     if (!this.refreshToken) return false;
-
-    if (this._isRefreshing) {
-      return new Promise((resolve) => {
-        this._addRefreshSubscriber((newToken) => {
-          resolve(!!newToken);
-        });
+    if (!session.refresh) {
+      session.refresh = this._refreshOnce(session).then(refreshed => {
+        // A failed refresh may have rotated the server token before losing
+        // its response. Keep its result until the session is invalidated.
+        if (refreshed) session.refresh = null;
+        return refreshed;
       });
     }
+    return session.refresh;
+  }
 
-    this._isRefreshing = true;
-
+  async _refreshOnce(session) {
     try {
-      const response = await fetch(`${API_BASE}/api/auth/refresh`, {
+      const { response, data } = await this._readJSON('/api/auth/refresh', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken: this.refreshToken })
       });
 
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        this.setToken(data.data.accessToken, data.data.refreshToken);
-        this._onTokenRefreshed(data.data.accessToken);
-        return true;
-      } else {
-        this.clearToken();
-        this._onTokenRefreshed(null);
-        return false;
-      }
-    } catch (error) {
-      this.clearToken();
-      this._onTokenRefreshed(null);
+      const accessToken = data?.data?.accessToken;
+      if (this._authSession !== session || !response.ok || !data?.success
+          || typeof accessToken !== 'string' || !accessToken) return false;
+      this._storeTokens(accessToken, data.data.refreshToken || this.refreshToken);
+      session.version += 1;
+      return true;
+    } catch {
       return false;
-    } finally {
-      this._isRefreshing = false;
+    }
+  }
+
+  _expireSession(session) {
+    if (this._authSession !== session) return;
+    this.clearToken();
+    this.user = null;
+    if (typeof app !== 'undefined' && app) {
+      app.user = null;
+      app.updateAuthUI(false);
+      app.showAuthModal();
     }
   }
 
   async request(path, options = {}) {
-    if (!this._online && !path.includes('/auth/')) {
+    const authPath = path.includes('/auth/');
+    if (!this._online && !authPath) {
       throw new Error('网络连接已断开，请检查网络设置');
     }
 
-    return this._requestWithRetry(path, options, 0);
+    const method = (options.method || 'GET').toUpperCase();
+    const safeRead = method === 'GET' || method === 'HEAD';
+    const config = { ...options, method };
+    const canRefresh = !authPath && !Object.keys(options.headers || {}).some(
+      name => name.toLowerCase() === 'authorization'
+    );
+    if (!safeRead && options.body && typeof options.body === 'object') {
+      config.body = JSON.stringify(options.body);
+    }
+
+    const session = this._authSession;
+    let replayed = false;
+    let retries = 0;
+    let lastError;
+
+    while (true) {
+      config.signal?.throwIfAborted();
+      if (this._authSession !== session) throw lastError;
+      const version = session.version;
+      try {
+        return await this._executeRequest(path, config);
+      } catch (error) {
+        lastError = error;
+        config.signal?.throwIfAborted();
+        if (canRefresh && !replayed && error.status === 401 && error.code === 'TOKEN_EXPIRED') {
+          replayed = true;
+          if (await this._tryRefreshToken(session, version)) continue;
+          this._expireSession(session);
+          error.message = '登录已过期，请重新登录';
+          throw error;
+        }
+
+        // Only reads can repeat after an ambiguous network or server failure.
+        if (!safeRead || retries >= this._maxRetries || !(error.networkFailure || error.status >= 500)) {
+          throw error;
+        }
+        const delay = this._retryDelay * Math.pow(2, retries++);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
   }
 
   async _executeRequest(path, options) {
-    const url = `${API_BASE}${path}`;
     const config = {
       ...options,
       headers: {
@@ -158,56 +182,60 @@ class BackendAPI {
       }
     };
 
-    if (options.body && typeof options.body === 'object' && options.method !== 'GET') {
-      config.body = JSON.stringify(options.body);
-    }
-
+    let response;
+    let data;
     try {
-      const response = await fetch(url, config);
-
-      if (response.status === 401 && !path.includes('/auth/')) {
-        const errorData = await response.json().catch(() => ({}));
-
-        if (errorData.code === 'TOKEN_EXPIRED') {
-          const refreshed = await this._tryRefreshToken();
-          if (refreshed) {
-            config.headers = { ...this.getHeaders(), ...options.headers };
-            if (options.body && typeof options.body === 'object') {
-              config.body = JSON.stringify(options.body);
-            }
-            return this._executeRequest(path, options);
-          } else {
-            this.clearToken();
-            if (window.app) {
-              app.user = null;
-              app.updateAuthUI(false);
-              app.showAuthModal();
-            }
-            throw new Error('登录已过期，请重新登录');
-          }
-        }
-
-        if (errorData.code === 'ACCOUNT_LOCKED') {
-          throw new Error(errorData.error || '账户已被锁定');
-        }
-      }
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        const error = new Error(data.error || '请求失败');
-        error.code = data.code;
-        error.status = response.status;
-        error.quota = data.quota;
-        throw error;
-      }
-
-      return data;
+      ({ response, data } = await this._readJSON(path, config));
     } catch (error) {
-      if (error.name === 'TypeError' && error.message.includes('fetch')) {
-        throw new Error('网络连接失败，请检查网络设置');
+      if (!options.signal?.aborted && (error.name === 'TypeError' || error.name === 'NetworkError')) {
+        const networkError = new Error('网络连接失败，请检查网络设置', { cause: error });
+        networkError.networkFailure = true;
+        throw networkError;
       }
       throw error;
+    }
+
+    if (response.ok) {
+      if (options.method !== 'HEAD' && response.status !== 204
+          && (!data || typeof data !== 'object' || Array.isArray(data))) {
+        throw new Error('后台返回了无效的响应数据');
+      }
+      return data;
+    }
+
+    const fallback = response.status === 401 && data?.code === 'ACCOUNT_LOCKED'
+      ? '账户已被锁定' : '请求失败';
+    const error = new Error(data?.error || fallback);
+    error.code = data?.code;
+    error.status = response.status;
+    error.quota = data?.quota;
+    throw error;
+  }
+
+  async _readJSON(path, options = {}) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this._requestTimeout);
+    const signal = options.signal
+      ? AbortSignal.any([controller.signal, options.signal])
+      : controller.signal;
+    try {
+      const response = await fetch(`${API_BASE}${path}`, { ...options, signal });
+      if (response.ok && (options.method === 'HEAD' || response.status === 204)) {
+        return { response, data: null };
+      }
+      const data = await response.json().catch(error => {
+        if (signal.aborted || error.name !== 'SyntaxError') throw error;
+        if (response.ok) throw new Error('后台返回了无效的响应数据', { cause: error });
+        return null;
+      });
+      return { response, data };
+    } catch (error) {
+      if (signal.aborted && signal.reason === controller.signal.reason) {
+        throw new Error('后台请求超时，结果未知', { cause: error });
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -338,7 +366,7 @@ class BackendAPI {
   }
 
   async getWork(id) {
-    return this.request(`/api/works/${id}`);
+    return this.request(`/api/works/${encodeURIComponent(id)}`);
   }
 
   async saveWork(work) {
@@ -349,14 +377,14 @@ class BackendAPI {
   }
 
   async updateWork(id, updates) {
-    return this.request(`/api/works/${id}`, {
+    return this.request(`/api/works/${encodeURIComponent(id)}`, {
       method: 'PUT',
       body: updates
     });
   }
 
   async deleteWork(id) {
-    return this.request(`/api/works/${id}`, {
+    return this.request(`/api/works/${encodeURIComponent(id)}`, {
       method: 'DELETE'
     });
   }

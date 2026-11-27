@@ -5,8 +5,9 @@ class MiniMaxAPI {
   }
 
   setApiKey(key) {
+    if (key) localStorage.setItem('minimax_api_key', key);
+    else localStorage.removeItem('minimax_api_key');
     this.apiKey = key;
-    localStorage.setItem('minimax_api_key', key);
   }
 
   getApiKey() {
@@ -34,10 +35,9 @@ class MiniMaxAPI {
           'Authorization': `Bearer ${this.apiKey}`
         },
         body: JSON.stringify(body),
-        signal: controller.signal
+        signal: controller.signal,
+        redirect: 'error'
       });
-
-      clearTimeout(timeoutId);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -51,13 +51,21 @@ class MiniMaxAPI {
         throw new Error(errorMsg);
       }
 
-      return await response.json();
+      const data = await response.json().catch(error => {
+        if (error.name !== 'SyntaxError') throw error;
+        throw new Error('MiniMax 返回了无效的响应数据', { cause: error });
+      });
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        throw new Error('MiniMax 返回了无效的响应数据');
+      }
+      return data;
     } catch (error) {
-      clearTimeout(timeoutId);
-      if (error.name === 'AbortError') {
-        throw new Error('请求超时，请稍后重试');
+      if (controller.signal.aborted) {
+        throw new Error('请求超时，生成结果未知', { cause: error });
       }
       throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
@@ -96,22 +104,33 @@ class MiniMaxAPI {
     return config.parseResponse(data);
   }
 
-  hexToBlob(hex, mimeType = 'audio/mp3') {
+  hexToBlob(hex, mimeType = 'audio/mpeg') {
+    if (typeof hex !== 'string' || !hex.length || hex.length % 2 || /[^0-9a-f]/i.test(hex)) {
+      throw new Error('响应中缺少有效音频数据');
+    }
     const bytes = new Uint8Array(hex.length / 2);
     for (let i = 0; i < hex.length; i += 2) {
-      bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+      bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
     }
     return new Blob([bytes], { type: mimeType });
   }
 
   getMimeType(format) {
-    const map = {
-      'mp3': 'audio/mp3',
-      'wav': 'audio/wav',
-      'flac': 'audio/flac',
-      'pcm': 'audio/pcm'
-    };
-    return map[format] || 'audio/mp3';
+    const normalized = typeof format === 'string' ? format.toLowerCase() : '';
+    return ['wav', 'flac', 'pcm'].includes(normalized) ? `audio/${normalized}` : 'audio/mpeg';
+  }
+
+  getMediaUrl(value) {
+    if (typeof value !== 'string' || !/^(?:https?:\/\/|\/(?![\\/]))/i.test(value)) return null;
+    try {
+      const url = new URL(value, window.location.origin);
+      if (url.username || url.password) return null;
+      return url.protocol === 'https:' || (url.protocol === 'http:' && url.origin === window.location.origin)
+        ? url.href
+        : null;
+    } catch {
+      return null;
+    }
   }
 
   downloadBlob(blob, filename) {

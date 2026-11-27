@@ -1,3 +1,6 @@
+const LEGACY_BACKEND_SERVICE = 'minimax-studio-backend';
+const AVAILABLE_MODELS = new Set(['image', 'speech', 'music', 'lyrics']);
+
 class App {
   constructor() {
     this.currentModel = 'image';
@@ -8,102 +11,94 @@ class App {
     this._blobUrls = [];
     this._authMode = 'login';
     this.directMode = false;
+    this.modeReady = false;
     this.init();
   }
 
   async init() {
     this.bindElements();
     this.bindEvents();
-    await this.detectMode();
     this.renderConfigPanel();
+    await this.detectMode();
+    this.modeReady = true;
+    this.generateBtn.disabled = false;
     if (this.user && !this.directMode) {
       await this.loadQuota();
     }
   }
 
   async detectMode() {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    let hasLegacyBackend = false;
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
-      const response = await fetch(`${window.location.origin}/api/health`, {
-        signal: controller.signal
+      const response = await fetch('/api/health', {
+        cache: 'no-store',
+        redirect: 'error',
+        signal: controller.signal,
+        headers: { Accept: 'application/json' }
       });
-      clearTimeout(timeoutId);
-      if (response.ok) {
-        this.directMode = false;
-        await this.checkAuth();
-        return;
+      const mediaType = response.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase();
+      if (response.ok && mediaType === 'application/json') {
+        const health = await response.json();
+        hasLegacyBackend = health?.service === LEGACY_BACKEND_SERVICE && health.status === 'ok';
       }
-    } catch (e) {
-      // backend not available
+    } catch {
+      // A static host, an unavailable service, or an invalid health response uses Direct Mode.
+    } finally {
+      clearTimeout(timeoutId);
     }
+    if (hasLegacyBackend) {
+      await this.checkAuth();
+      return;
+    }
+
     this.directMode = true;
-    const savedKey = localStorage.getItem('minimax_api_key') || '';
-    if (savedKey) {
-      api.setApiKey(savedKey);
-      this.user = { username: '直接模式', email: '' };
-      this.updateAuthUI(true);
-      this.updateApiStatusDirect();
-    } else {
-      this.user = null;
-      this.updateAuthUI(false);
-      this.showApiKeyModal();
-    }
+    this.updateDirectKeyUI();
+    if (!api.getApiKey()) this.showApiKeyModal();
   }
 
   showApiKeyModal() {
-    const existing = document.getElementById('apikey-modal');
-    if (existing) {
-      existing.classList.add('open');
-      return;
-    }
-    const modal = document.createElement('div');
-    modal.className = 'modal open';
-    modal.id = 'apikey-modal';
-    modal.innerHTML = `
-      <div class="modal-backdrop"></div>
-      <div class="modal-content auth-modal-content">
-        <div class="auth-header">
-          <h2>🔑 配置 API Key</h2>
-        </div>
-        <div style="padding:0 0 12px;color:var(--text-secondary);font-size:14px;line-height:1.6;">
-          当前为<strong>直接调用模式</strong>，请输入你的 MiniMax API Key 即可使用全部功能。<br>
-          <a href="https://platform.minimaxi.com/" target="_blank" rel="noopener" style="color:var(--accent-primary);">前往 MiniMax 平台获取 API Key →</a>
-        </div>
-        <form id="apikey-form" style="display:flex;flex-direction:column;gap:12px;">
-          <div class="form-group">
-            <label class="form-label">API Key</label>
-            <input type="password" class="form-input" id="apikey-input" placeholder="sk-..." autocomplete="off">
-          </div>
-          <div id="apikey-error" style="color:var(--error-color, #ef4444);font-size:13px;min-height:18px;"></div>
-          <button type="submit" class="btn btn-primary btn-block">确认并开始使用</button>
-        </form>
-      </div>
-    `;
-    document.body.appendChild(modal);
+    this.apiKeyError.textContent = '';
+    this.apiKeyModal.classList.add('open');
+    this.apiKeyInput.focus();
+  }
 
-    modal.querySelector('#apikey-form').addEventListener('submit', (e) => {
-      e.preventDefault();
-      const key = document.getElementById('apikey-input').value.trim();
-      const errorEl = document.getElementById('apikey-error');
+  closeApiKeyModal() {
+    if (!this.apiKeyModal.classList.contains('open')) return;
+    this.apiKeyInput.value = '';
+    this.apiKeyModal.classList.remove('open');
+    this.generateBtn.focus();
+  }
+
+  bindApiKeyEvents() {
+    document.getElementById('apikey-modal-backdrop').addEventListener('click', () => this.closeApiKeyModal());
+    document.getElementById('apikey-modal-close').addEventListener('click', () => this.closeApiKeyModal());
+    document.getElementById('apikey-form').addEventListener('submit', event => {
+      event.preventDefault();
+      const key = this.apiKeyInput.value.trim();
       if (!key) {
-        errorEl.textContent = '请输入 API Key';
+        this.apiKeyError.textContent = '请输入 API Key';
         return;
       }
-      api.setApiKey(key);
-      this.user = { username: '直接模式', email: '' };
-      this.updateAuthUI(true);
-      this.updateApiStatusDirect();
-      modal.classList.remove('open');
-      Utils.showToast('API Key 配置成功', 'success');
+      try {
+        api.setApiKey(key);
+      } catch {
+        this.apiKeyError.textContent = '当前浏览器无法保存 API Key';
+        return;
+      }
+      this.updateDirectKeyUI();
+      this.closeApiKeyModal();
+      Utils.showToast('API Key 已保存', 'success');
     });
   }
 
-  updateApiStatusDirect() {
-    const dot = this.apiStatus?.querySelector('.status-dot');
-    const text = this.apiStatus?.querySelector('span:last-child');
-    if (dot) dot.className = 'status-dot connected';
-    if (text) text.textContent = '直接模式';
+  updateDirectKeyUI() {
+    const hasKey = Boolean(api.getApiKey());
+    this.user = hasKey ? { username: '直连模式' } : null;
+    document.getElementById('my-works-btn').hidden = true;
+    document.getElementById('logout-btn').textContent = '清除 API Key';
+    this.updateAuthUI(hasKey);
   }
 
   bindElements() {
@@ -118,6 +113,9 @@ class App {
     this.headerDesc = document.getElementById('header-desc');
     this.emptyIcon = document.getElementById('empty-icon');
     this.apiStatus = document.getElementById('api-status');
+    this.apiKeyModal = document.getElementById('apikey-modal');
+    this.apiKeyInput = document.getElementById('apikey-input');
+    this.apiKeyError = document.getElementById('apikey-error');
     this.lightbox = document.getElementById('image-lightbox');
     this.lightboxImage = document.getElementById('lightbox-image');
     this.lightboxClose = document.getElementById('lightbox-close');
@@ -134,9 +132,7 @@ class App {
   bindEvents() {
     this.navItems.forEach(item => {
       item.addEventListener('click', () => {
-        this.switchModel(item.dataset.model);
-        this.navItems.forEach(n => n.classList.remove('active'));
-        item.classList.add('active');
+        if (!this.switchModel(item.dataset.model)) return;
         this.sidebar.classList.remove('open');
         document.getElementById('sidebar-overlay')?.classList.remove('active');
       });
@@ -171,6 +167,7 @@ class App {
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         this.closeLightbox();
+        this.closeApiKeyModal();
         this.closeAuthModal();
         this.closeWorksModal();
       }
@@ -183,6 +180,17 @@ class App {
     if (myWorksBtn) myWorksBtn.addEventListener('click', () => this.showWorksModal());
     if (this.worksModalBackdrop) this.worksModalBackdrop.addEventListener('click', () => this.closeWorksModal());
     if (this.worksModalClose) this.worksModalClose.addEventListener('click', () => this.closeWorksModal());
+    this.worksModal.addEventListener('click', event => {
+      const button = event.target.closest('[data-work-action]');
+      const work = button?.closest('.work-item');
+      if (!work) return;
+      const id = decodeURIComponent(work.dataset.id);
+      switch (button.dataset.workAction) {
+        case 'view': this.viewWork(id); break;
+        case 'delete': this.deleteWork(id); break;
+        case 'favorite': this.toggleFavorite(id, button.dataset.favorite === 'true'); break;
+      }
+    });
 
     const themeBtn = document.getElementById('theme-toggle-btn');
     if (themeBtn) {
@@ -204,6 +212,7 @@ class App {
     }
 
     this.bindAuthEvents();
+    this.bindApiKeyEvents();
   }
 
   bindAuthEvents() {
@@ -371,11 +380,18 @@ class App {
   }
 
   async handleLogout() {
+    if (this.isGenerating) {
+      Utils.showToast('请等待当前生成结束', 'info');
+      return;
+    }
     if (this.directMode) {
-      api.setApiKey('');
-      localStorage.removeItem('minimax_api_key');
-      this.user = null;
-      this.updateAuthUI(false);
+      try {
+        api.setApiKey('');
+      } catch {
+        Utils.showToast('当前浏览器无法清除 API Key', 'error');
+        return;
+      }
+      this.updateDirectKeyUI();
       this.showApiKeyModal();
       Utils.showToast('API Key 已清除', 'info');
       return;
@@ -437,8 +453,7 @@ class App {
       const work = result.data;
 
       this.closeWorksModal();
-      this.switchModel(work.work_type);
-      this.navItems.forEach(n => n.classList.toggle('active', n.dataset.model === work.work_type));
+      if (!this.switchModel(work.work_type)) return;
 
       if (work.result_url || work.result_data) {
         this.renderStoredWork(work);
@@ -452,7 +467,7 @@ class App {
     try {
       await backendApi.updateWork(id, { is_favorite: isFavorite });
       if (this._allWorks) {
-        const work = this._allWorks.find(w => w.id === id);
+        const work = this._allWorks.find(w => String(w.id) === id);
         if (work) work.is_favorite = isFavorite;
         this.renderWorksList(this._allWorks);
       }
@@ -463,6 +478,7 @@ class App {
   }
 
   renderStoredWork(work) {
+    this.revokeBlobUrls();
     this.resultEmpty.style.display = 'none';
     this.resultContent.style.display = 'block';
 
@@ -472,9 +488,10 @@ class App {
         this.renderImageResult({ images, metadata: work.metadata || {} }, work.params || {});
       } else if (work.work_type === 'speech' || work.work_type === 'music') {
         this.renderAudioResult({
-          audioHex: work.result_data,
+          audio: work.result_data,
+          audioUrl: work.result_url,
           extraInfo: work.metadata || {}
-        }, work.params || {});
+        }, work.params || {}, work.work_type);
       } else if (work.work_type === 'lyrics') {
         const meta = work.metadata || {};
         this.renderLyricsResult({
@@ -494,7 +511,7 @@ class App {
     try {
       await backendApi.deleteWork(id);
       Utils.showToast('作品已删除', 'success');
-      this._allWorks = this._allWorks.filter(w => w.id !== id);
+      this._allWorks = this._allWorks.filter(w => String(w.id) !== id);
       this.renderWorksList(this._allWorks);
     } catch (error) {
       Utils.showToast(error.message, 'error');
@@ -508,11 +525,17 @@ class App {
   updateApiStatus() {
     const dot = this.apiStatus?.querySelector('.status-dot');
     const text = this.apiStatus?.querySelector('span:last-child');
-    if (dot) dot.className = this.user ? 'status-dot connected' : 'status-dot disconnected';
-    if (text) text.textContent = this.user ? (this.directMode ? '直接模式' : '已连接') : '未登录';
+    if (this.directMode) {
+      dot.className = 'status-dot';
+      text.textContent = this.user ? '直连 · 密钥已保存' : '直连 · 未配置密钥';
+    } else {
+      dot.className = this.user ? 'status-dot connected' : 'status-dot disconnected';
+      text.textContent = this.user ? '后台模式 · 已登录' : '后台模式 · 未登录';
+    }
   }
 
   switchModel(modelId) {
+    if (this.isGenerating || !AVAILABLE_MODELS.has(modelId)) return false;
     this.currentModel = modelId;
     this.uploadedImageData = null;
     this.revokeBlobUrls();
@@ -522,6 +545,8 @@ class App {
     this.emptyIcon.textContent = config.icon;
     this.renderConfigPanel();
     this.showEmpty();
+    this.navItems.forEach(item => item.classList.toggle('active', item.dataset.model === modelId));
+    return true;
   }
 
   renderConfigPanel() {
@@ -701,7 +726,7 @@ class App {
   }
 
   async handleGenerate() {
-    if (this.isGenerating) return;
+    if (!this.modeReady || this.isGenerating || !AVAILABLE_MODELS.has(this.currentModel)) return;
     if (!this.user) {
       if (this.directMode) {
         this.showApiKeyModal();
@@ -744,7 +769,7 @@ class App {
       let result;
 
       if (this.directMode) {
-        result = await this.handleDirectGenerate(params, config);
+        result = await this.handleDirectGenerate(params);
       } else {
         switch (this.currentModel) {
           case 'image':
@@ -803,7 +828,7 @@ class App {
     }
   }
 
-  async handleDirectGenerate(params, config) {
+  async handleDirectGenerate(params) {
     switch (this.currentModel) {
       case 'image':
         return await api.generateImage(params);
@@ -827,28 +852,12 @@ class App {
         break;
       case 'speech':
       case 'music':
-        this.renderAudioResultDirect(result, params);
+        this.renderAudioResult(result, params);
         break;
       case 'lyrics':
         this.renderLyricsResult(result);
         break;
     }
-  }
-
-  renderAudioResultDirect(result, params) {
-    let audioSrc = '';
-    let audioFormat = params.audio_format || params.format || 'mp3';
-    const mimeType = api.getMimeType(audioFormat);
-
-    if (result.audioHex) {
-      const blob = api.hexToBlob(result.audioHex, mimeType);
-      audioSrc = this.createBlobUrl(blob);
-    } else if (result.extraInfo?.audio_url) {
-      audioSrc = result.extraInfo.audio_url;
-    }
-
-    const info = result.extraInfo || {};
-    this.resultContent.innerHTML = Templates.audioResult(audioSrc, audioFormat, this.currentModel, info);
   }
 
   async saveWorkToBackend(params, result) {
@@ -867,7 +876,10 @@ class App {
         workData.result_data = result.lyrics;
         workData.metadata = { title: result.title, styleTags: result.styleTags };
       } else {
-        workData.result_data = result.audio;
+        const audio = result.audio || result.audioHex;
+        const url = api.getMediaUrl(audio) || api.getMediaUrl(result.audioUrl) || api.getMediaUrl(result.extraInfo?.audio_url);
+        if (url) workData.result_url = url;
+        else workData.result_data = audio;
       }
 
       await backendApi.saveWork(workData);
@@ -896,7 +908,20 @@ class App {
   }
 
   renderImageResult(result, params) {
-    const images = result.images || [];
+    const images = [];
+    for (const value of Array.isArray(result.images) ? result.images : []) {
+      if (typeof value === 'string' && params.response_format === 'base64') {
+        const mimeType = value.startsWith('iVBORw0KGgo') ? 'image/png'
+          : value.startsWith('/9j/') ? 'image/jpeg' : '';
+        if (mimeType && !/[^a-zA-Z0-9+/=]/.test(value)) {
+          images.push(`data:${mimeType};base64,${value}`);
+          continue;
+        }
+      }
+      const url = api.getMediaUrl(value);
+      if (url) images.push(url);
+    }
+    if (!images.length) throw new Error('响应中缺少有效图片数据');
     this.resultContent.innerHTML = Templates.imageResult(images, result.metadata);
 
     this.resultContent.querySelectorAll('[data-lightbox-index]').forEach(btn => {
@@ -907,21 +932,27 @@ class App {
     });
   }
 
-  renderAudioResult(result, params) {
-    let audioSrc = '';
-    let audioFormat = params.audio_format || params.format || 'mp3';
-    const mimeType = api.getMimeType(audioFormat);
-
-    if (result.audio) {
-      const blob = api.hexToBlob(result.audio, mimeType);
-      audioSrc = this.createBlobUrl(blob);
-    }
-
+  renderAudioResult(result, params, modelType = this.currentModel) {
     const info = result.extraInfo || {};
-    this.resultContent.innerHTML = Templates.audioResult(audioSrc, audioFormat, this.currentModel, info);
+    const rawAudio = result.audio || result.audioHex;
+    const mimeType = api.getMimeType(info.audio_format || params.audio_format || params.format);
+    const audioFormat = mimeType === 'audio/mpeg' ? 'mp3' : mimeType.slice('audio/'.length);
+    const remoteUrl = api.getMediaUrl(rawAudio) || api.getMediaUrl(result.audioUrl) || api.getMediaUrl(info.audio_url);
+    const audioSrc = remoteUrl || this.createBlobUrl(api.hexToBlob(rawAudio, mimeType));
+    this.resultContent.innerHTML = Templates.audioResult(audioFormat, modelType, info, Boolean(remoteUrl));
+    this.resultContent.querySelector('.audio-download').href = audioSrc;
+    const player = this.resultContent.querySelector('.audio-player');
+    const playbackStatus = this.resultContent.querySelector('.audio-playback-status');
+    player.addEventListener('error', () => {
+      playbackStatus.textContent = '浏览器无法播放这段音频';
+    }, { once: true });
+    player.src = audioSrc;
   }
 
   renderLyricsResult(result) {
+    if (typeof result.lyrics !== 'string' || !result.lyrics.trim()) {
+      throw new Error('响应中缺少有效歌词数据');
+    }
     this.resultContent.innerHTML = Templates.lyricsResult(result);
     this._lastLyricsResult = result;
 
@@ -938,11 +969,7 @@ class App {
   }
 
   sendLyricsToMusic() {
-    if (!this._lastLyricsResult) return;
-    this.switchModel('music');
-    this.navItems.forEach(n => {
-      n.classList.toggle('active', n.dataset.model === 'music');
-    });
+    if (!this._lastLyricsResult || !this.switchModel('music')) return;
     setTimeout(() => {
       const lyricsTextarea = this.configPanel.querySelector('[data-key="lyrics"]');
       const promptInput = this.configPanel.querySelector('[data-key="prompt"]');
