@@ -11,18 +11,31 @@
 MiniMax Studio retains its original creative-workbench identity. The legacy
 multimodal experiment remains separate from the new dialogue workflow.
 
-## Legacy workbench
+## Start the controlled local workbench
 
-The browser workbench has Direct Mode for image, speech, music and lyrics. It
-labels chat and video as unavailable. Saving a MiniMax API key stores it in the
-browser and does not contact MiniMax until a generation request.
+With Node 22+:
 
-Backend Mode requires a same-origin `GET /api/health` returning HTTP 2xx and the
-JSON service identifier `minimax-studio-backend` with status `ok`. The legacy
-`server/server.js` and corresponding auth, generation and works service remain
-absent. The local voice service has its own `/api/dialogue/*` routes. The legacy
-media and Backend client were exercised with a loopback fixture.
-[Legacy workbench acceptance](docs/LEGACY_RETRY_AUTH_ACCEPTANCE.md).
+```sh
+npm run studio
+```
+
+Open the printed `http://127.0.0.1:4174` URL. Text, image, video, speech, music
+and lyrics use deterministic local fixtures. This server does not read a provider
+credential, allow external network requests, or send any paid requests. Media are
+synthetic previews, not genuine model generations. Starting or canceling an operation requires exact same-origin access.
+An unavailable backend disables generation; the page never falls back to Direct Mode.
+
+Use **恢复已有结果** to retrieve an existing operation after a browser timeout
+or reload; polling uses bounded backoff and never resubmits generation. Session
+storage holds opaque operation IDs, not prompts or credentials. Download recovery
+is limited to the same running local server and the operation's 30-minute lifetime.
+Cancellation prevents a pending local operation from completing; it does not
+represent paid-provider cancellation.
+
+The controlled service deliberately does not restore the historical
+`server/server.js` authentication/works implementation. Its routes are separate
+from the voice service's `/api/dialogue/*` routes.
+[Legacy fixture acceptance](docs/LEGACY_RETRY_AUTH_ACCEPTANCE.md).
 
 ## Start the voice workspace
 
@@ -83,28 +96,22 @@ Reconciled main `e061f760ec5218d9c0985572c4c242559f4b31d7` with voice candidate
 - the recording workflow and guarded local service have synthetic-only tests that never consume quota;
 - the legacy live text/image/video/speech/music flows remain unverified.
 
-Legacy Backend Mode cannot be honestly documented as runnable. Historical context remains
-in [REPOSITORY_AUDIT.md](REPOSITORY_AUDIT.md) and [issue #2](https://github.com/Luckycat133/minimax-studio/issues/2).
+The [historical repository audit](REPOSITORY_AUDIT.md) documents the missing
+historical auth/works backend. The new controlled multimodal entry point does not
+claim to restore that service or validate live provider model contracts.
 
-## Direct Mode warning
+## Explicit Direct Mode experiment
 
-Opening `index.html` may expose the direct browser experiment, but Direct Mode is suitable only for local personal testing:
+A separately served loopback static copy can opt in using
+`http://127.0.0.1:<port>/index.html?mode=direct-experiment`. Public Pages never
+enable this mode. The controlled localhost server intentionally blocks outbound
+connections even with the experiment flag.
 
-- the API key is accessible to JavaScript running in that browser origin;
-- browser `localStorage` is long-lived and is not an appropriate default for a valuable production credential;
-- requests are sent directly to MiniMax;
-- model names and API contracts may be stale.
-
-Do not enter a valuable key into the legacy experiment. Do not deploy Direct Mode as a public shared site. The new offline workflow does not read or use those legacy credentials.
-
-## Remaining legacy multimodal work
-
-1. Recover and verify the backend source from a trusted copy; the manifests already exist.
-2. Commit lockfiles and verify `npm ci`.
-3. Make Backend Mode the verified default.
-4. Add mock tests for text/image/video/speech/music flows, timeouts, cancellation, polling backoff, and download recovery.
-5. Record the MiniMax model-list source and verification date.
-6. Remove tracked dependency trees and, after backup, clean them from history.
+Do not use a valuable key; Direct Mode sends requests to MiniMax and may incur
+charges. The key is held only in page memory and cleared by reload; this code
+neither reads nor writes the historical `minimax_api_key` localStorage key.
+If you previously used that experiment, clear old site data separately when
+appropriate. Text and video in this project are available only as backend fixtures.
 
 ## Static Pages publication boundary
 
@@ -131,7 +138,7 @@ or downloads, and does not establish whether they contained sensitive data.
 After the approved merge and successful Pages deployment, verify that the site
 and its CSS/JavaScript still load and that a HEAD request to
 `server/data/minimax.db` returns 404. Until then, the previous site remains live.
-This publication fix does not resolve the Direct Mode or backend limitations above.
+The controlled localhost server and fixtures are not published to Pages.
 
 ## Changelog
 

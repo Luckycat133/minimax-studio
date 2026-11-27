@@ -1,16 +1,15 @@
 # Legacy multimodal maintenance
 
 Use only for the `index.html` experiment or a request to recover its old backend.
-The voice workspace and `server/dialogue-server.mjs` do not restore that backend.
+The voice workspace and the new `npm run studio` offline fixture service do not restore historical auth/works.
 
 ## Follow the actual mode
 
 `App.detectMode()` in `js/app.js` probes `/api/health` and falls back to Direct
-Mode. Check that path before claiming the page used a backend. An HTML load,
+Mode only in earlier releases. Current releases fail closed on an invalid health response. Check that path before claiming the page used a backend. An HTML load,
 mock health response or stored key does not prove authenticated backend service.
 
-- `js/api.js` calls the configured provider, stores `minimax_api_key` in
-  localStorage, and decodes/downloads media.
+- `js/api.js` calls the configured provider, keeps the key in page memory only, and decodes/downloads media.
 - `js/backend-api.js` is the access/refresh/CSRF facade with reconnect queues
   and bounded retry. Confirm corresponding server routes exist before using it.
 - `js/models.js` owns model request/response shapes. Verify current official
@@ -40,8 +39,7 @@ Report the exact checks performed; syntax and mocks do not prove authenticated
 model availability. Real generation requires authorization for that use and cost.
 
 Saved browser credentials, `server/.env`, and any `server/data/minimax.db` are
-user data, not fixtures. Never print, copy or expose keys. Browser-held keys and
-localStorage are experimental local behavior, not a secure public deployment
+user data, not fixtures. Never print, copy or expose keys. Browser-held keys are experimental local behavior, not a secure public deployment
 pattern; an ordinary UI fix does not authorize publishing Direct Mode.
 
 For requested backend recovery, identify a trusted source revision, restore the

@@ -2,12 +2,12 @@
 
 > A browser interface experiment for MiniMax AI multimodal APIs covering text generation, image creation, video generation, speech synthesis, and music composition.
 
-MiniMax Studio is an open-source web application designed as an experimental interface for testing and interacting with MiniMax's multimodal generative AI platform. The project currently operates in **Maintenance Mode**, featuring an experimental Direct Browser Client alongside specifications for a backend proxy architecture.
+MiniMax Studio is an open-source web application designed as an experimental interface for testing and interacting with MiniMax's multimodal generative AI platform. The controlled local workbench runs with deterministic fixtures by default; the Direct Browser Client is an opt-in loopback experiment.
 
 ## Project Status & Maintenance Mode
 
-- Status: Maintenance Mode (experimental direct browser mode active, archive decision pending).
-- Architecture State: Browser direct mode functional via static client (`index.html`); legacy multimodal backend (`server/server.js`) remains unrecovered. The separate local voice workspace runs via `node server/dialogue-server.mjs`; generation starts disabled and the service is never packaged for Pages.
+- Status: Controlled local fixture workbench; live multimodal provider compatibility is not verified.
+- Architecture State: `npm run studio` serves the default controlled workbench on loopback and does not call MiniMax. The historical auth/works backend (`server/server.js`) remains unrecovered. The separate local voice workspace runs via `node server/dialogue-server.mjs`; generation starts disabled and the service is never packaged for Pages.
 - Safe Static Deploy: GitHub Pages build workflow (`scripts/build_pages.py`) strictly allowlists 19 frontend and documentation files, completely isolating credentials, database files, and backend artifacts.
 - Testing: Deterministic python-based static suite (`tests/test_pages_build.py`) validates asset confinement and prevents leaking runtime state.
 
@@ -16,10 +16,10 @@ MiniMax Studio is an open-source web application designed as an experimental int
 - Direct Browser Client: Standalone vanilla JavaScript frontend (`index.html`, `js/app.js`, `js/utils.js`, `js/templates.js`, `js/polyfills.js`) with responsive dark/light theme UI.
 - MiniMax Open API Client (`js/api.js`): Browser-native HTTP client making authenticated direct calls to `https://api.minimaxi.com` via Fetch and AbortController.
 - Model Configuration Layer (`js/models.js`): Centralized definitions for request payload schemas, default parameters, validation, and response parsers for each modality.
-- Backend Proxy Facade (`js/backend-api.js`): Interface handling JWT authentication, CSRF tokens, session management, and request retries (currently inactive due to unrecovered backend).
-- Client-Side Session Storage: Local credential and preference persistence via `localStorage` (`minimax_api_key`, theme settings).
+- Backend Clients (`js/backend-api.js`): Same-origin fixture operations (start, read, cancel, download recovery) and the separate historical auth/works facade.
+- Storage: Direct experiment keys stay in page memory. Session storage can hold opaque fixture operation IDs; the theme preference uses local storage.
 
-## Supported MiniMax Multimodal APIs
+## Historical MiniMax adapter reference (live compatibility unverified)
 
 - Text Generation & Chat (`/v1/text/chatcompletion_v2`):
   - Models: `MiniMax-M2.7` (recommended), `MiniMax-Text-01`, `abab6.5s-chat`.
@@ -43,7 +43,7 @@ MiniMax Studio is an open-source web application designed as an experimental int
 ## Important Security & Execution Notes
 
 - Direct Browser Mode Risks:
-  - User API key (`minimax_api_key`) is stored in browser `localStorage`.
+  - An explicitly enabled loopback page retains the API key only in memory. A reload clears it; this version does not load or save old `minimax_api_key` values.
   - Requests dispatch directly to `https://api.minimaxi.com` from user origin.
   - Recommended only for local personal experimentation with disposable, restricted API keys.
   - Never deploy Direct Mode on public shared hosting without an authenticating backend proxy.

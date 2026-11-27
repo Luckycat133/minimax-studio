@@ -10,6 +10,18 @@ at `0.1.0`.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-27
+
+### Added
+- Loopback-only multimodal backend default with deterministic fixtures for text,
+  image, video, speech, music and lyrics; operation polling, cancellation and
+  download recovery without resubmitting generation.
+
+### Changed
+- Direct Mode is explicit, loopback-only and memory-only. Static Pages fail
+  closed when the controlled backend is unavailable.
+- Clean npm installation and offline multimodal contracts now gate the Pages build.
+
 ## [0.2.1] - 2026-11-11
 
 ### Changed

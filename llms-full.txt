@@ -11,8 +11,8 @@ MiniMax Studio is an open-source multimodal generative AI studio designed for we
 ### Maintenance Mode Notice
 
 - **Repository Status**: Maintenance Mode (decision pending archive / backend recovery).
-- **Current Operational Profile**: Direct Browser Client mode (`index.html`) using client-provided API keys against MiniMax Open API endpoints (`https://api.minimaxi.com`).
-- **Backend Status**: Backend server entry point (`server/server.js`) is unrecovered; the legacy multimodal backend is non-functional without restoring its implementation. The separate local voice workspace can run with `node server/dialogue-server.mjs`; it starts with generation disabled, and its local service is not shipped in the Pages artifact.
+- **Current Operational Profile**: `npm run studio` serves a default same-origin local fixture workbench. It never reads provider credentials or calls a paid service. The separate opt-in loopback Direct experiment uses browser-memory keys only.
+- **Backend Status**: `server/studio-server.mjs` serves deterministic text, image, video, speech, music and lyrics with read backoff, cancellation and result recovery. Historical auth/works entry point `server/server.js` is unrecovered. The separate local voice workspace can run with `node server/dialogue-server.mjs`; it starts with generation disabled, and its local service is not shipped in the Pages artifact.
 - **Production Guardrails**: The root project must not be hosted publicly in Direct Mode with shared credentials. A static deployment boundary exists for GitHub Pages (`scripts/build_pages.py`) that strictly packages 19 allowlisted frontend and documentation files and prevents leakage of databases or private environment configuration.
 
 ---
@@ -20,48 +20,16 @@ MiniMax Studio is an open-source multimodal generative AI studio designed for we
 ## 2. System Architecture
 
 ```
-                          +-------------------------------------------------------+
-                          |                   Web Browser                         |
-                          |                                                       |
-                          |   +--------------------+     +--------------------+   |
-                          |   |   index.html       |     |   Theme & CSS      |   |
-                          |   |   (Single Page UI) |     |  (styles/themes)   |   |
-                          |   +---------+----------+     +--------------------+   |
-                          |             |                                         |
-                          |             v                                         |
-                          |   +--------------------+                              |
-                          |   |     js/app.js      |                              |
-                          |   |  (UI Controller &  |                              |
-                          |   |   Mode Detection)  |                              |
-                          |   +----+----------+----+                              |
-                          |        |          |                                   |
-                          |        |          v                                   |
-                          |        |   +----------------------------------+       |
-                          |        |   | js/models.js                     |       |
-                          |        |   | (Model Configs, Request Builders,|       |
-                          |        |   |  Response Parsers)               |       |
-                          |        |   +----------------------------------+       |
-                          |        |          ^                                   |
-                          |        v          |                                   |
-                          |   +---------------+----+                              |
-                          |   |     js/api.js      |                              |
-                          |   |  (Direct Browser   |                              |
-                          |   |    HTTP Client)    |                              |
-                          |   +---------+----------+                              |
-                          |             |                                         |
-                          |             | localStorage: minimax_api_key           |
-                          +-------------|-----------------------------------------+
-                                        | Direct HTTPS (Bearer Auth)
-                                        v
-                          +-------------------------------------------------------+
-                          |      MiniMax Open API (api.minimaxi.com)              |
-                          |                                                       |
-                          |  - /v1/text/chatcompletion_v2 (Chat/Text)            |
-                          |  - /v1/image_generation       (Image-01)              |
-                          |  - /v1/t2a_v2                 (Speech 2.8)            |
-                          |  - /v1/music_generation       (Music 2.6)             |
-                          |  - /v1/lyrics_generation      (Lyric Assistant)       |
-                          +-------------------------------------------------------+
+Default local mode:
+  index.html -> js/app.js -> StudioOperationAPI (js/backend-api.js)
+      -> same-origin server/studio-server.mjs -> deterministic local fixtures
+  Opaque operation IDs can be kept in browser session storage for recovery.
+  Server restart or expiry makes the operation unavailable; no POST is replayed.
+
+Separate explicit Direct experiment:
+  loopback static index.html?mode=direct-experiment -> js/api.js
+      -> MiniMax Open API over HTTPS (page-memory bearer key; charges possible).
+  This experiment does not activate when health is missing or invalid.
 ```
 
 ### Component Breakdown
@@ -72,9 +40,9 @@ MiniMax Studio is an open-source multimodal generative AI studio designed for we
 
 2. **`js/app.js` (Application Controller)**:
    - Probes `/api/health` with a 3000ms timeout on startup via `detectMode()`.
-   - If `/api/health` fails or is unreachable, activates **Direct Mode** (`this.directMode = true`).
-   - Retrieves or prompts for `minimax_api_key` stored in browser `localStorage`.
-   - Handles switching between modalities: `image`, `speech`, `music`, `chat`, and `lyrics`.
+   - If `/api/health` fails or is unreachable, generation is disabled.
+   - Direct Mode requires an explicit flag on a loopback page and does not persist a MiniMax key.
+   - The controlled backend supports `image`, `speech`, `music`, `chat`, `video`, and `lyrics` as fixture flows.
    - Binds UI inputs, performs client-side validation, invokes generation methods, and renders output cards.
 
 3. **`js/models.js` (Model Specification & Adapter Layer)**:
@@ -88,9 +56,9 @@ MiniMax Studio is an open-source multimodal generative AI studio designed for we
    - Hex-to-Blob decoding (`hexToBlob(hex, mimeType)`) for audio responses.
    - Media download management (`downloadBlob(blob, filename)`).
 
-5. **`js/backend-api.js` (Backend Facade - Inactive in Direct Mode)**:
-   - Implements JWT access/refresh token management, CSRF validation (`X-CSRF-Token`, `X-CSRF-Session`), exponential backoff retries, and offline queueing.
-   - Designed to communicate with an Express proxy server at `/api/*`.
+5. **`js/backend-api.js`**:
+   - The controlled client starts an operation once, uses read-only retries, and cancels by ID.
+   - The separate historical facade is for compatible auth/works servers; the local fixture service does not expose those routes.
 
 6. **`js/utils.js` & `js/templates.js`**:
    - Helper functions: `formatTime`, `formatFileSize`, `generateId`, `debounce`, `showToast`, `fileToBase64`, `copyToClipboard`.
@@ -98,7 +66,9 @@ MiniMax Studio is an open-source multimodal generative AI studio designed for we
 
 ---
 
-## 3. Multimodal API Endpoints & Request/Response Contracts
+## 3. Historical MiniMax API Endpoint Reference
+
+These provider schemas are historical. None is used by the default local fixture backend.
 
 ### 3.1. Image Generation
 
@@ -421,16 +391,14 @@ MiniMax APIs standardize return status in `base_resp`:
 
 ## 5. Security & Deployment Architecture
 
-### Direct Mode vs. Production Backend
+### Execution modes
 
-| Attribute | Direct Browser Mode (Current) | Production Backend Mode (Target) |
+| Attribute | Controlled Backend Mode (default) | Direct Browser Experiment (opt-in) |
 |---|---|---|
-| **Credential Storage** | Browser `localStorage` (`minimax_api_key`) | Server-side environment variables (`MINIMAX_API_KEY`) |
-| **Network Path** | Browser -> `api.minimaxi.com` directly | Browser -> Application Backend -> `api.minimaxi.com` |
-| **CORS Dependency** | Relies on MiniMax CORS headers | First-party domain requests; no third-party CORS issues |
-| **Quota Enforcement** | None (client can spend entire key balance) | Server-side user tiers, daily allowances, rate limiting |
-| **Authentication** | None (single-user local testing) | JWT access/refresh tokens with bcrypt password hashing |
-| **Security Scope** | Suitable ONLY for local development / testing | Suitable for multi-user public web deployments |
+| Credential storage | None; fixture IDs only in session storage | Page memory only |
+| Network path | Browser -> exact loopback origin only; no provider calls | Browser -> MiniMax directly, can incur charges |
+| Setup | `npm run studio` | `?mode=direct-experiment` on a separately served loopback static page |
+| Public hosting | Server is not part of the Pages artifact | Not enabled on public hosts |
 
 ### Static Pages Publication Boundary
 

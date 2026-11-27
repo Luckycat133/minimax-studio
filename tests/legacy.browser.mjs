@@ -71,7 +71,7 @@ const server = createServer(async (req, res) => {
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
 
-async function newPage(browser) {
+async function newPage(browser, experiment = false) {
   const context = await browser.createBrowserContext({ downloadBehavior: { policy: 'allow', downloadPath: temporary } });
   const page = await context.newPage();
   page.on('pageerror', error => report.pageErrors.push(error.message));
@@ -83,7 +83,7 @@ async function newPage(browser) {
     if (!['fonts.googleapis.com', 'fonts.gstatic.com'].includes(url.hostname)) report.unexpectedRequests.push(url.origin);
     return void request.abort();
   });
-  await page.goto(`${base}/index.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${base}/index.html${experiment ? '?mode=direct-experiment' : ''}`, { waitUntil: 'domcontentloaded' });
   return { context, page };
 }
 
@@ -124,7 +124,7 @@ try {
     args: ['--disable-background-networking', '--no-sandbox']
   });
   report.browser = await browser.version();
-  let { context, page } = await newPage(browser);
+  let { context, page } = await newPage(browser,true);
   await status(page, '直连 · 未配置密钥');
   assert.equal(await page.$eval('#apikey-modal', el => el.classList.contains('open')), true);
   assert.equal(await page.evaluate(() => document.activeElement.id), 'apikey-input');
@@ -133,20 +133,24 @@ try {
   await page.click('#generate-btn');
   await page.type('#apikey-input', fixtureKey);
   await page.click('#apikey-form button[type=submit]');
-  await status(page, '直连 · 密钥已保存');
+  await status(page, '直连 · 本页已配置密钥');
   assert.equal(await page.$eval('#api-status .status-dot', el => el.classList.contains('connected')), false);
   assert.equal(await page.$eval('#my-works-btn', el => getComputedStyle(el).display), 'none');
   assert.equal(calls.filter(call => call.authorization).length, 0);
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await status(page, '直连 · 密钥已保存');
-  assert.equal(await page.$eval('#apikey-modal', el => el.classList.contains('open')), false);
+  await status(page, '直连 · 未配置密钥');
+  assert.equal(await page.evaluate(() => localStorage.getItem('minimax_api_key')), null);
+  assert.equal(await page.$eval('#apikey-modal', el => el.classList.contains('open')), true);
+  await page.type('#apikey-input', fixtureKey);
+  await page.click('#apikey-form button[type=submit]');
+  await status(page, '直连 · 本页已配置密钥');
   for (const model of ['chat', 'video']) {
     const button = `[data-model="${model}"]`;
-    assert.equal(await page.$eval(button, el => el.disabled && el.textContent.includes('暂不可用')), true);
+    assert.equal(await page.$eval(button, el => el.disabled && el.textContent.includes('本地后台专用')), true);
     await page.$eval(button, el => el.click());
   }
   assert.equal(await page.$eval('.nav-item.active', el => el.dataset.model), 'image');
-  passed('HTML 200 selects Direct Mode; key form saves across reload, without auth or a verified badge; Chat and video are disabled');
+  passed('Explicit loopback experiment; key is memory-only across reload; Chat and video are disabled');
 
   await page.evaluate(url => api.setBaseUrl(url), base);
   await page.click('[data-model="speech"]');
@@ -195,11 +199,13 @@ try {
   for (const mode of ['other', 'redirect', 'slow']) {
     health = mode;
     ({ context, page } = await newPage(browser));
-    await status(page, '直连 · 未配置密钥');
+    await page.waitForFunction(() => document.querySelector('#api-status').textContent.includes('本地后台不可用'));
+    assert.equal(await page.$eval('#generate-btn', el => el.disabled),true);
+    assert.equal(await page.$eval('#apikey-modal', el => el.classList.contains('open')),false);
     await context.close();
   }
   assert.equal(calls.some(call => call.pathname === '/fixture-health'), false);
-  passed('wrong JSON identity, redirects and incomplete health bodies select Direct Mode');
+  passed('wrong JSON identity, redirects and incomplete health bodies fail closed');
 
   health = 'valid';
   ({ context, page } = await newPage(browser));

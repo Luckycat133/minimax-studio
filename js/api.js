@@ -1,12 +1,10 @@
 class MiniMaxAPI {
   constructor() {
     this.baseUrl = 'https://api.minimaxi.com';
-    this.apiKey = localStorage.getItem('minimax_api_key') || '';
+    this.apiKey = '';
   }
 
   setApiKey(key) {
-    if (key) localStorage.setItem('minimax_api_key', key);
-    else localStorage.removeItem('minimax_api_key');
     this.apiKey = key;
   }
 

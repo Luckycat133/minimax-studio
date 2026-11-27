@@ -402,3 +402,105 @@ class BackendAPI {
 }
 
 const backendApi = new BackendAPI();
+
+// Same-origin operation client. POST is sent once; reconnect uses only GET.
+class StudioOperationAPI {
+  constructor({ request = (...args) => fetch(...args), wait = StudioOperationAPI.sleep, createId, storage, timeout = 3000 } = {}) {
+    this.request = request;
+    this.wait = wait;
+    this.createId = createId || (() => [...crypto.getRandomValues(new Uint8Array(16))].map(x => x.toString(16).padStart(2,'0')).join(''));
+    this.storage = storage;
+    this.current = this._readStored('minimax_studio_operation');
+    this.last = this._readStored('minimax_studio_result');
+    this.timeout = timeout;
+  }
+
+  static sleep(ms, signal) {
+    return new Promise((resolve,reject)=>{
+      signal?.throwIfAborted();
+      const finish = () => { signal?.removeEventListener('abort',abort); resolve(); };
+      const timer = setTimeout(finish,ms);
+      const abort = () => { clearTimeout(timer); reject(signal.reason); };
+      signal?.addEventListener('abort',abort,{once:true});
+    });
+  }
+
+  remember(id) {
+    this.current = id;
+    this._store('minimax_studio_operation', id);
+  }
+
+  rememberResult(id) {
+    this.last = id;
+    this._store('minimax_studio_result', id);
+  }
+
+  remembered() { return this.current; }
+
+  _store(key, value) {
+    try { if(value) this.storage?.setItem(key,value); else this.storage?.removeItem(key); } catch {}
+  }
+
+  _readStored(key) {
+    try { const id = this.storage?.getItem(key); return /^[0-9a-f]{32}$/.test(id) ? id : null; }
+    catch { return null; }
+  }
+
+  async _request(path, init = {}, signal) {
+    const deadline = AbortSignal.timeout(this.timeout);
+    const combined = signal ? AbortSignal.any([signal,deadline]) : deadline;
+    const res = await this.request(path,{...init,signal:combined,cache:'no-store',redirect:'error',headers:{Accept:'application/json',...init.headers}});
+    const type = res.headers.get('content-type')?.split(';')[0];
+    if (type !== 'application/json') throw new Error('本地后台返回无效响应');
+    const data = await res.json();
+    if (!res.ok) throw Object.assign(new Error(data?.error || '本地后台请求失败'),{status:res.status});
+    return data;
+  }
+
+  async start(modality, params, signal) {
+    const id = this.createId();
+    this.remember(id); // operation handle only; never a credential or prompt
+    let state;
+    try {
+      state = await this._request('/api/studio/operations',{
+        method:'POST', headers:{'Content-Type':'application/json'},body:JSON.stringify({id,modality,params})
+      },signal);
+    } catch (error) {
+      // A timeout/cancel may have occurred after acceptance. Never issue another POST.
+      if (error.status && error.status < 500 && error.status !== 408) this.remember(null);
+      throw error;
+    }
+    return this.poll(id,signal,state);
+  }
+
+  async poll(id, signal, initial) {
+    const path = this._path(id);
+    let state = initial;
+    for(let attempt=0; attempt<=12; attempt++) {
+      signal?.throwIfAborted();
+      if (!state) {
+        try { state = await this._request(path,{},signal); }
+        catch(error) {
+          if (signal?.aborted) throw signal.reason;
+          if (error.status && error.status < 500 && error.status !== 408 && error.status !== 429) throw error;
+          // Bounded retry is allowed for a read, not for generation.
+        }
+      }
+      if (state) {
+        if (state.id !== id || !['pending','completed','cancelled'].includes(state.status)) throw new Error('后台任务状态无效');
+        if (state.status !== 'pending') return state;
+      }
+      if (attempt === 12) break;
+      state = null;
+      await this.wait(Math.min(300 * (2 ** attempt),2400),signal);
+    }
+    throw new Error('等待后台结果超时；可恢复已有任务，不会重复提交');
+  }
+
+  cancel(id) { return this._request(this._path(id),{method:'DELETE'}); }
+
+  _path(id) {
+    if (!/^[0-9a-f]{32}$/.test(id)) throw new Error('无效后台任务 ID');
+    return `/api/studio/operations/${id}`;
+  }
+}

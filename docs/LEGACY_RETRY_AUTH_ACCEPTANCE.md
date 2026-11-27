@@ -1,5 +1,9 @@
 # Legacy Backend retry and auth acceptance
 
+This is a historical acceptance record. Current versions fail closed after an
+invalid backend probe; Direct Mode is a loopback-only, memory-only experiment.
+The controlled multimodal service is a separate `npm run studio` entry point.
+
 Local verification on 2026-11-15 used Node 26.13.1 and the working tree based on
 `5d57027b4b91743e01795f7e0b00f547bd5f952a`. The tests load the actual browser
 facade with synthetic storage and a mocked `fetch`. All requests use a fixture
