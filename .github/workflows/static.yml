@@ -25,11 +25,19 @@ jobs:
         with:
           node-version: 22
       - name: Install test dependencies without browser downloads
-        run: npm ci --ignore-scripts
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "true"
+        run: npm ci
       - name: Test offline DOM workflows
         run: npm run test:dom
-      - name: Test offline dialogue contracts (no provider calls)
+      - name: Test offline dialogue and multimodal contracts (no provider calls)
         run: npm test
+      - name: Test loopback multimodal browser flows without provider calls
+        run: |
+          export CHROME_PATH="$(command -v google-chrome)"
+          test -x "$CHROME_PATH"
+          npm run test:browser:studio
+          npm run test:browser:legacy
       - name: Test public artifact isolation
         run: python3 -m unittest discover -s tests -v
       - name: Build allowlisted public files

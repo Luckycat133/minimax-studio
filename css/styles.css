@@ -742,6 +742,8 @@ body {
   margin-bottom: 16px;
 }
 
+.btn[hidden] { display: none; }
+
 .btn {
   display: inline-flex;
   align-items: center;

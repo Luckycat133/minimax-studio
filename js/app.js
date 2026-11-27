@@ -1,3 +1,4 @@
+const LOCAL_WORKBENCH_MODELS = new Set(['image', 'speech', 'music', 'lyrics', 'chat', 'video']);
 const LEGACY_BACKEND_SERVICE = 'minimax-studio-backend';
 const AVAILABLE_MODELS = new Set(['image', 'speech', 'music', 'lyrics']);
 
@@ -12,6 +13,8 @@ class App {
     this._authMode = 'login';
     this.directMode = false;
     this.modeReady = false;
+    this.backendReady = false;
+    this.localStudio = null;
     this.init();
   }
 
@@ -21,8 +24,9 @@ class App {
     this.renderConfigPanel();
     await this.detectMode();
     this.modeReady = true;
-    this.generateBtn.disabled = false;
-    if (this.user && !this.directMode) {
+    if (this.localStudio) this.updateStudioActions();
+    else this.generateBtn.disabled = !this.backendReady && !this.directMode;
+    if (this.user && !this.directMode && !this.localStudio) {
       await this.loadQuota();
     }
   }
@@ -30,6 +34,15 @@ class App {
   async detectMode() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 3000);
+    // Never downgrade from a missing/malformed backend into paid Direct Mode.
+    if (['127.0.0.1','localhost','[::1]'].includes(location.hostname) && location.protocol === 'http:'
+        && new URLSearchParams(location.search).get('mode') === 'direct-experiment') {
+      this.directMode = true;
+      this.updateDirectKeyUI();
+      this.showApiKeyModal();
+      clearTimeout(timeoutId);
+      return;
+    }
     let hasLegacyBackend = false;
     try {
       const response = await fetch('/api/health', {
@@ -41,24 +54,35 @@ class App {
       const mediaType = response.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase();
       if (response.ok && mediaType === 'application/json') {
         const health = await response.json();
+        if (health?.service === 'minimax-studio-local' && health.status === 'ok'
+            && health.mode === 'fixture' && health.version === 1) {
+          let storage;
+          try { storage = window.sessionStorage; } catch {}
+          this.localStudio = new StudioOperationAPI({storage});
+          this.backendReady = true;
+          this.apiStatus.textContent = '本地后台 · 演示数据（零额度）';
+          this.navItems.forEach(item => { item.disabled = !LOCAL_WORKBENCH_MODELS.has(item.dataset.model); });
+          this.updateStudioActions();
+          return;
+        }
         hasLegacyBackend = health?.service === LEGACY_BACKEND_SERVICE && health.status === 'ok';
       }
     } catch {
-      // A static host, an unavailable service, or an invalid health response uses Direct Mode.
+      // An unavailable or invalid backend remains unavailable.
     } finally {
       clearTimeout(timeoutId);
     }
     if (hasLegacyBackend) {
+      this.backendReady = true;
       await this.checkAuth();
       return;
     }
 
-    this.directMode = true;
-    this.updateDirectKeyUI();
-    if (!api.getApiKey()) this.showApiKeyModal();
+    this.apiStatus.textContent = '本地后台不可用 · 请用 npm run studio 启动';
   }
 
   showApiKeyModal() {
+    if (!this.directMode) return;
     this.apiKeyError.textContent = '';
     this.apiKeyModal.classList.add('open');
     this.apiKeyInput.focus();
@@ -76,6 +100,7 @@ class App {
     document.getElementById('apikey-modal-close').addEventListener('click', () => this.closeApiKeyModal());
     document.getElementById('apikey-form').addEventListener('submit', event => {
       event.preventDefault();
+      if (!this.directMode) return;
       const key = this.apiKeyInput.value.trim();
       if (!key) {
         this.apiKeyError.textContent = '请输入 API Key';
@@ -84,12 +109,12 @@ class App {
       try {
         api.setApiKey(key);
       } catch {
-        this.apiKeyError.textContent = '当前浏览器无法保存 API Key';
+        this.apiKeyError.textContent = '当前页面无法配置 API Key';
         return;
       }
       this.updateDirectKeyUI();
       this.closeApiKeyModal();
-      Utils.showToast('API Key 已保存', 'success');
+      Utils.showToast('API Key 仅在本页有效', 'success');
     });
   }
 
@@ -105,6 +130,8 @@ class App {
     this.navItems = document.querySelectorAll('.nav-item');
     this.configPanel = document.getElementById('config-panel');
     this.generateBtn = document.getElementById('generate-btn');
+    this.studioCancel = document.getElementById('studio-cancel');
+    this.studioResume = document.getElementById('studio-resume');
     this.resetBtn = document.getElementById('reset-btn');
     this.resultPanel = document.getElementById('result-panel');
     this.resultEmpty = document.getElementById('result-empty');
@@ -139,6 +166,8 @@ class App {
     });
 
     this.generateBtn.addEventListener('click', () => this.handleGenerate());
+    this.studioCancel.addEventListener('click', () => void this.cancelStudioOperation());
+    this.studioResume.addEventListener('click', () => void this.resumeStudioOperation());
     this.resetBtn.addEventListener('click', () => this.resetParams());
 
     if (this.lightboxClose) {
@@ -527,7 +556,7 @@ class App {
     const text = this.apiStatus?.querySelector('span:last-child');
     if (this.directMode) {
       dot.className = 'status-dot';
-      text.textContent = this.user ? '直连 · 密钥已保存' : '直连 · 未配置密钥';
+      text.textContent = this.user ? '直连 · 本页已配置密钥' : '直连 · 未配置密钥';
     } else {
       dot.className = this.user ? 'status-dot connected' : 'status-dot disconnected';
       text.textContent = this.user ? '后台模式 · 已登录' : '后台模式 · 未登录';
@@ -535,7 +564,7 @@ class App {
   }
 
   switchModel(modelId) {
-    if (this.isGenerating || !AVAILABLE_MODELS.has(modelId)) return false;
+    if (this.isGenerating || !(this.localStudio ? LOCAL_WORKBENCH_MODELS : AVAILABLE_MODELS).has(modelId)) return false;
     this.currentModel = modelId;
     this.uploadedImageData = null;
     this.revokeBlobUrls();
@@ -726,8 +755,8 @@ class App {
   }
 
   async handleGenerate() {
-    if (!this.modeReady || this.isGenerating || !AVAILABLE_MODELS.has(this.currentModel)) return;
-    if (!this.user) {
+    if (!this.modeReady || (!this.backendReady && !this.directMode) || this._cancellingStudio || this.isGenerating || !(this.localStudio ? LOCAL_WORKBENCH_MODELS : AVAILABLE_MODELS).has(this.currentModel)) return;
+    if (!this.user && !this.localStudio) {
       if (this.directMode) {
         this.showApiKeyModal();
       } else {
@@ -754,6 +783,15 @@ class App {
 
     if (params.mode === 'i2i' && !this.uploadedImageData) {
       Utils.showToast('图生图模式需要上传参考图片', 'warning');
+      return;
+    }
+
+    if (this.localStudio) {
+      if (this.localStudio.remembered()) {
+        Utils.showToast('请先恢复或取消上一个后台任务', 'warning');
+        return;
+      }
+      await this.runStudioOperation(signal => this.localStudio.start(this.currentModel,params,signal));
       return;
     }
 
@@ -825,6 +863,77 @@ class App {
       this.generateBtn.innerHTML = '<span class="btn-icon">✨</span><span>开始生成</span>';
       if (loadingOverlay._cleanup) loadingOverlay._cleanup();
       loadingOverlay.remove();
+    }
+  }
+
+  updateStudioActions() {
+    if (!this.localStudio) return;
+    const recoverable = Boolean(this.localStudio.remembered());
+    this.studioCancel.hidden = !recoverable;
+    this.studioResume.hidden = !(recoverable || this.localStudio.last) || this.isGenerating;
+    this.generateBtn.disabled = this.isGenerating || recoverable;
+  }
+
+  async runStudioOperation(action) {
+    this.isGenerating = true;
+    this.studioController = new AbortController();
+    const pending = action(this.studioController.signal);
+    this.updateStudioActions();
+    let state;
+    try {
+      state = await pending;
+    } catch(error) {
+      if (error.status === 404) {
+        if (this.localStudio.remembered()) this.localStudio.remember(null);
+        else this.localStudio.rememberResult(null);
+      }
+      if (!this.studioController.signal.aborted) this.renderError(error.message || '本地任务未完成');
+    } finally {
+      this.isGenerating = false;
+      this.studioController = null;
+    }
+    try { if (state) this.showStudioState(state); }
+    catch(error) { this.renderError(error.message || '本地结果无效'); }
+    this.updateStudioActions();
+  }
+
+  showStudioState(state) {
+    if (state.status === 'cancelled') {
+      this.localStudio.remember(null);
+      this.showEmpty();
+      Utils.showToast('本地任务已取消','info');
+      return;
+    }
+    if (state.status !== 'completed' || !LOCAL_WORKBENCH_MODELS.has(state.modality)) return;
+    if (state.modality !== this.currentModel) this.switchModel(state.modality);
+    this.renderResult(state.result,{});
+    this.localStudio.rememberResult(state.id);
+    this.localStudio.remember(null);
+    Utils.showToast('已取得本地演示结果','success');
+  }
+
+  async resumeStudioOperation() {
+    const id = this.localStudio?.remembered() || this.localStudio?.last;
+    if (id && !this.isGenerating && !this._cancellingStudio) await this.runStudioOperation(signal => this.localStudio.poll(id,signal));
+  }
+
+  async cancelStudioOperation() {
+    const id = this.localStudio?.remembered();
+    if (!id || this._cancellingStudio) return;
+    this._cancellingStudio = true;
+    try {
+      // The server result decides whether cancellation or completion won.
+      const state = await this.localStudio.cancel(id);
+      if (state.status === 'cancelled') this.studioController?.abort();
+      // During a poll, if completion won, let the existing operation render once.
+      if (state.status === 'cancelled' || !this.isGenerating) this.showStudioState(state);
+    } catch(error) {
+      // A cancel can race the original upload. Retain the ID on ambiguous errors.
+      if (error.status === 404 && !this.isGenerating) this.localStudio.remember(null);
+      this.renderError(error.message || '取消结果未知');
+    } finally {
+      this._cancellingStudio = false;
+      this.updateStudioActions();
     }
   }
 
@@ -904,6 +1013,26 @@ class App {
       case 'lyrics':
         this.renderLyricsResult(result);
         break;
+      case 'chat': {
+        const text = document.createElement('pre');
+        text.textContent = result.content;
+        this.resultContent.replaceChildren(text);
+        break;
+      }
+      case 'video': {
+        const url = api.getMediaUrl(result.videoUrl);
+        if (!url) throw new Error('响应中缺少有效视频数据');
+        const video = document.createElement('video');
+        video.controls = true;
+        video.src = url;
+        video.style.maxWidth = '100%';
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'minimax-studio-preview.mp4';
+        link.textContent = '下载视频';
+        this.resultContent.replaceChildren(video,link);
+        break;
+      }
     }
   }
 
@@ -939,7 +1068,7 @@ class App {
     const audioFormat = mimeType === 'audio/mpeg' ? 'mp3' : mimeType.slice('audio/'.length);
     const remoteUrl = api.getMediaUrl(rawAudio) || api.getMediaUrl(result.audioUrl) || api.getMediaUrl(info.audio_url);
     const audioSrc = remoteUrl || this.createBlobUrl(api.hexToBlob(rawAudio, mimeType));
-    this.resultContent.innerHTML = Templates.audioResult(audioFormat, modelType, info, Boolean(remoteUrl));
+    this.resultContent.innerHTML = Templates.audioResult(audioFormat, modelType, info, Boolean(remoteUrl && !this.localStudio));
     this.resultContent.querySelector('.audio-download').href = audioSrc;
     const player = this.resultContent.querySelector('.audio-player');
     const playbackStatus = this.resultContent.querySelector('.audio-playback-status');

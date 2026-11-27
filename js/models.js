@@ -569,6 +569,16 @@ const MODEL_CONFIGS = {
     }
   },
 
+  video: {
+    id: 'video',
+    name: '视频生成',
+    icon: '🎬',
+    description: '本地后台视频流程演示（不调用 MiniMax）',
+    params: {
+      prompt: { type: 'textarea', label: '视频描述', required: true, maxLength: 4000 }
+    }
+  },
+
   lyrics: {
     id: 'lyrics',
     name: '歌词生成',

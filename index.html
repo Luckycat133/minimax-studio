@@ -4,9 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>MiniMax Studio</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/themes.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦞</text></svg>">
@@ -63,14 +60,14 @@
           <span class="nav-icon" aria-hidden="true">💬</span>
           <span class="nav-text">
             <span class="nav-label">AI 对话</span>
-            <span class="nav-desc">暂不可用</span>
+            <span class="nav-desc">本地后台专用</span>
           </span>
         </button>
         <button class="nav-item" data-model="video" disabled>
           <span class="nav-icon" aria-hidden="true">🎬</span>
           <span class="nav-text">
             <span class="nav-label">视频生成</span>
-            <span class="nav-desc">暂不可用</span>
+            <span class="nav-desc">本地后台专用</span>
           </span>
         </button>
       </nav>
@@ -121,6 +118,8 @@
               <span class="btn-icon">✨</span>
               <span>开始生成</span>
             </button>
+            <button class="btn btn-secondary" id="studio-cancel" type="button" hidden>取消任务</button>
+            <button class="btn btn-secondary" id="studio-resume" type="button" hidden>恢复已有结果</button>
             <button class="btn btn-secondary" id="reset-btn">
               <span>重置参数</span>
             </button>
@@ -152,9 +151,9 @@
           <input type="password" class="form-input" id="apikey-input" autocomplete="off" required>
         </div>
         <div class="auth-error" id="apikey-error" role="alert"></div>
-        <button type="submit" class="btn btn-primary btn-block">保存 API Key</button>
+        <button type="submit" class="btn btn-primary btn-block">在此页启用</button>
         <p style="color:var(--text-muted);font-size:12px;margin-top:12px;text-align:center;">
-          密钥保存在当前浏览器，生成请求会将它发送给 MiniMax。<br>
+          实验模式：密钥只留在本页内存；提交生成会将它发送给 MiniMax，可能产生费用。<br>
           <a href="https://platform.minimaxi.com/" target="_blank" rel="noopener" style="color:var(--accent-primary);">前往 MiniMax 开放平台获取 API Key</a>
         </p>
       </form>

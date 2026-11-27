@@ -1,6 +1,6 @@
 {
   "name": "minimax-studio",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "description": "minimax-studio: minimal dev dependency root for puppeteer-based tooling",
   "devDependencies": {
@@ -9,12 +9,14 @@
     "puppeteer": "^25.17.0"
   },
   "scripts": {
-    "test": "node --test tests/dialogue.test.mjs tests/production.test.mjs tests/dialogue-provider.test.mjs tests/dialogue-server.test.mjs tests/backend-api.test.mjs",
+    "test": "node --test tests/dialogue.test.mjs tests/production.test.mjs tests/dialogue-provider.test.mjs tests/dialogue-server.test.mjs tests/backend-api.test.mjs tests/studio.test.mjs",
     "test:browser": "node tests/dialogue.browser.mjs",
     "test:browser:legacy": "node tests/legacy.browser.mjs",
     "build": "python3 scripts/build_pages.py",
     "test:dom": "node --test tests/dialogue.dom.test.mjs",
     "build:offline": "python3 scripts/build_offline.py",
-    "dialogue": "node server/dialogue-server.mjs"
+    "dialogue": "node server/dialogue-server.mjs",
+    "studio": "node server/studio-server.mjs",
+    "test:browser:studio": "node tests/studio.browser.mjs"
   }
 }
