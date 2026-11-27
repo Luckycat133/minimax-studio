@@ -6,7 +6,8 @@
 >
 > The local recording workflow passed Chromium import, playback, review and ZIP
 > round-trip checks with synthetic WAVs. Live MiniMax entitlement, generated
-> speech quality, billing and deployed Pages still need verification.
+> speech quality and billing were not tested. The reviewed static Pages build
+> and deployment passed on v0.3.0.
 
 MiniMax Studio retains its original creative-workbench identity. The legacy
 multimodal experiment remains separate from the new dialogue workflow.
@@ -57,7 +58,9 @@ npm run build:offline
 python3 scripts/build_offline.py /new/path/MiniMax_Studio_Voice_Workspace.html
 ```
 
-This file supports the full local-recording workflow but cannot call MiniMax.
+You can also download the standalone HTML and SHA-256 manifest from the
+[v0.3.0 Release](https://github.com/Luckycat133/minimax-studio/releases/tag/v0.3.0).
+This file supports the local-recording workflow but cannot call MiniMax.
 Only an explicitly enabled, budgeted local service can make provider requests;
 the key never goes in the frontend or a public deployment. See the
 [documentation index](docs/README.md),
@@ -142,7 +145,8 @@ The controlled localhost server and fixtures are not published to Pages.
 
 ## Changelog
 
-See [CHANGELOG.md](CHANGELOG.md) for version history (starting at `v0.1.0` through `v0.2.1`).
+See [CHANGELOG.md](CHANGELOG.md) for version history and the
+[repository audit](REPOSITORY_AUDIT.md) for resolved and remaining findings.
 
 ## License
 
