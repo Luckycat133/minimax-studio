@@ -12,7 +12,7 @@ const MIN_TTL = 30 * 60 * 1000;
 const ID = '[0-9a-f]{32}';
 const ASSETS = new Set([
   'index.html','css/styles.css','css/themes.css','js/polyfills.js','js/models.js','js/utils.js',
-  'js/templates.js','js/api.js','js/backend-api.js','js/app.js',
+  'js/templates.js','js/api.js','js/backend-api.js','js/workbench-mode.js','js/app.js',
   'dialogue.html','css/dialogue.css','js/dialogue.mjs','js/dialogue-core.mjs',
   'js/production-core.mjs','js/production-storage.mjs','js/production-queue.mjs',
 ]);

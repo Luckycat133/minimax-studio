@@ -24,6 +24,7 @@ PUBLIC_FILES = (
     "js/templates.js",
     "js/api.js",
     "js/backend-api.js",
+    "js/workbench-mode.js",
     "js/app.js",
 )
 

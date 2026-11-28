@@ -1,5 +1,4 @@
 const LOCAL_WORKBENCH_MODELS = new Set(['image', 'speech', 'music', 'lyrics', 'chat', 'video']);
-const LEGACY_BACKEND_SERVICE = 'minimax-studio-backend';
 const AVAILABLE_MODELS = new Set(['image', 'speech', 'music', 'lyrics']);
 
 class App {
@@ -11,9 +10,8 @@ class App {
     this.quota = null;
     this._blobUrls = [];
     this._authMode = 'login';
-    this.directMode = false;
+    this.mode = WORKBENCH_MODE.UNAVAILABLE;
     this.modeReady = false;
-    this.backendReady = false;
     this.localStudio = null;
     this.init();
   }
@@ -31,54 +29,40 @@ class App {
     }
   }
 
-  async detectMode() {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
-    // Never downgrade from a missing/malformed backend into paid Direct Mode.
-    if (['127.0.0.1','localhost','[::1]'].includes(location.hostname) && location.protocol === 'http:'
-        && new URLSearchParams(location.search).get('mode') === 'direct-experiment') {
-      this.directMode = true;
-      this.updateDirectKeyUI();
-      this.showApiKeyModal();
-      clearTimeout(timeoutId);
-      return;
-    }
-    let hasLegacyBackend = false;
-    try {
-      const response = await fetch('/api/health', {
-        cache: 'no-store',
-        redirect: 'error',
-        signal: controller.signal,
-        headers: { Accept: 'application/json' }
-      });
-      const mediaType = response.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase();
-      if (response.ok && mediaType === 'application/json') {
-        const health = await response.json();
-        if (health?.service === 'minimax-studio-local' && health.status === 'ok'
-            && health.mode === 'fixture' && health.version === 1) {
-          let storage;
-          try { storage = window.sessionStorage; } catch {}
-          this.localStudio = new StudioOperationAPI({storage});
-          this.backendReady = true;
-          this.apiStatus.textContent = '本地后台 · 演示数据（零额度）';
-          this.navItems.forEach(item => { item.disabled = !LOCAL_WORKBENCH_MODELS.has(item.dataset.model); });
-          this.updateStudioActions();
-          return;
-        }
-        hasLegacyBackend = health?.service === LEGACY_BACKEND_SERVICE && health.status === 'ok';
-      }
-    } catch {
-      // An unavailable or invalid backend remains unavailable.
-    } finally {
-      clearTimeout(timeoutId);
-    }
-    if (hasLegacyBackend) {
-      this.backendReady = true;
-      await this.checkAuth();
-      return;
-    }
+  get directMode() {
+    return this.mode === WORKBENCH_MODE.DIRECT_EXPERIMENT;
+  }
 
-    this.apiStatus.textContent = '本地后台不可用 · 请用 npm run studio 启动';
+  get backendReady() {
+    return this.mode === WORKBENCH_MODE.CONTROLLED_FIXTURE ||
+      this.mode === WORKBENCH_MODE.LEGACY_BACKEND;
+  }
+
+  async detectMode() {
+    this.mode = await resolveWorkbenchMode(location);
+    switch (this.mode) {
+      case WORKBENCH_MODE.DIRECT_EXPERIMENT:
+        this.updateDirectKeyUI();
+        this.showApiKeyModal();
+        return;
+      case WORKBENCH_MODE.CONTROLLED_FIXTURE:
+        this.connectControlledFixture();
+        return;
+      case WORKBENCH_MODE.LEGACY_BACKEND:
+        await this.checkAuth();
+        return;
+      default:
+        this.apiStatus.textContent = '本地后台不可用 · 请用 npm run studio 启动';
+    }
+  }
+
+  connectControlledFixture() {
+    let storage;
+    try { storage = window.sessionStorage; } catch {}
+    this.localStudio = new StudioOperationAPI({storage});
+    this.apiStatus.textContent = '本地后台 · 演示数据（零额度）';
+    this.navItems.forEach(item => { item.disabled = !LOCAL_WORKBENCH_MODELS.has(item.dataset.model); });
+    this.updateStudioActions();
   }
 
   showApiKeyModal() {
