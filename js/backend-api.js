@@ -405,7 +405,8 @@ const backendApi = new BackendAPI();
 
 // Same-origin operation client. POST is sent once; reconnect uses only GET.
 class StudioOperationAPI {
-  constructor({ request = (...args) => fetch(...args), wait = StudioOperationAPI.sleep, createId, storage, timeout = 3000 } = {}) {
+  constructor({ request = (...args) => fetch(...args), wait = StudioOperationAPI.sleep, createId, storage, timeout = 3000, now = Date.now,
+    loadWav = () => import('./production-core.mjs') } = {}) {
     this.request = request;
     this.wait = wait;
     this.createId = createId || (() => [...crypto.getRandomValues(new Uint8Array(16))].map(x => x.toString(16).padStart(2,'0')).join(''));
@@ -413,6 +414,8 @@ class StudioOperationAPI {
     this.current = this._readStored('minimax_studio_operation');
     this.last = this._readStored('minimax_studio_result');
     this.timeout = timeout;
+    this.now = now;
+    this.loadWav = loadWav;
   }
 
   static sleep(ms, signal) {
@@ -446,15 +449,100 @@ class StudioOperationAPI {
     catch { return null; }
   }
 
-  async _request(path, init = {}, signal) {
+  _deadline(signal) {
     const deadline = AbortSignal.timeout(this.timeout);
-    const combined = signal ? AbortSignal.any([signal,deadline]) : deadline;
-    const res = await this.request(path,{...init,signal:combined,cache:'no-store',redirect:'error',headers:{Accept:'application/json',...init.headers}});
-    const type = res.headers.get('content-type')?.split(';')[0];
-    if (type !== 'application/json') throw new Error('本地后台返回无效响应');
-    const data = await res.json();
-    if (!res.ok) throw Object.assign(new Error(data?.error || '本地后台请求失败'),{status:res.status});
-    return data;
+    return signal ? AbortSignal.any([signal, deadline]) : deadline;
+  }
+
+  _retryAfter(header) {
+    if (!header) return null;
+    const value = header.trim();
+    if (/^\d+$/.test(value)) return Number(value) * 1000;
+    // Ignore free-form values such as "1.5" that Date.parse may treat as dates.
+    if (!/^[A-Za-z]{3}, .* GMT$/.test(value)) return null;
+    const until = Date.parse(value);
+    return Number.isFinite(until) ? Math.max(0, until - this.now()) : null;
+  }
+
+  _responseError(res) {
+    // A reverse proxy may emit an HTML body. Classify the HTTP status first,
+    // discard its body, and never reflect untrusted gateway text into the UI.
+    void res.body?.cancel().catch(() => {});
+    const messages = {
+      404: '本地任务不存在或已过期',
+      429: '本地后台暂时限流；请稍后恢复已有任务',
+      502: '本地后台网关暂不可用；可恢复已有任务',
+      504: '本地后台网关超时；可恢复已有任务'
+    };
+    return Object.assign(new Error(messages[res.status] || '本地后台请求失败'), {
+      status: res.status,
+      retryAfterMs: res.status === 429 ? this._retryAfter(res.headers.get('retry-after')) : null
+    });
+  }
+
+  async _request(path, init = {}, signal) {
+    const combined = this._deadline(signal);
+    const res = await this.request(path, {
+      ...init, signal: combined, cache: 'no-store', redirect: 'error',
+      headers: { Accept: 'application/json', ...init.headers }
+    });
+    if (!res.ok) throw this._responseError(res);
+    const type = res.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
+    if (type !== 'application/json') {
+      void res.body?.cancel().catch(() => {});
+      throw new Error('本地后台返回无效响应');
+    }
+    return res.json();
+  }
+
+  async downloadAudio(id, advertisedUrl, signal) {
+    const path = this._path(id) + '/download';
+    if (advertisedUrl !== path) throw new Error('本地音频地址无效');
+    signal?.throwIfAborted();
+    const { validateWav, MAX_AUDIO_BYTES } = await this.loadWav();
+    const combined = this._deadline(signal);
+    combined.throwIfAborted();
+    const res = await this.request(path, {
+      signal: combined, cache: 'no-store', redirect: 'error', headers: { Accept: 'audio/wav' }
+    });
+    if (!res.ok) throw this._responseError(res);
+    const type = res.headers.get('content-type')?.split(';')[0].trim().toLowerCase();
+    const length = res.headers.get('content-length');
+    const encoding = res.headers.get('content-encoding');
+    if (res.status !== 200 || type !== 'audio/wav' || !res.body
+        || (encoding && encoding !== 'identity')
+        || (length !== null && (!/^\d+$/.test(length) || +length < 44 || +length > MAX_AUDIO_BYTES))) {
+      void res.body?.cancel().catch(() => {});
+      throw new Error('本地音频响应不完整；可恢复已有任务');
+    }
+    const reader = res.body.getReader();
+    const chunks = [];
+    let received = 0;
+    try {
+      while (true) {
+        combined.throwIfAborted();
+        const { done, value } = await reader.read();
+        if (done) break;
+        received += value.byteLength;
+        if (received > MAX_AUDIO_BYTES || (length !== null && received > +length)) {
+          throw new Error('音频字节数超出范围');
+        }
+        chunks.push(value);
+      }
+      combined.throwIfAborted();
+      if (length !== null && received !== +length) throw new Error('音频传输长度不符');
+      const data = new Uint8Array(received);
+      let offset = 0;
+      for (const chunk of chunks) { data.set(chunk, offset); offset += chunk.byteLength; }
+      validateWav(data);
+      return new Blob([data], {type: 'audio/wav'});
+    } catch {
+      void reader.cancel().catch(() => {});
+      signal?.throwIfAborted();
+      throw new Error('本地音频下载中断或校验失败；可恢复已有任务');
+    } finally {
+      reader.releaseLock();
+    }
   }
 
   async start(modality, params, signal) {
@@ -467,7 +555,7 @@ class StudioOperationAPI {
       },signal);
     } catch (error) {
       // A timeout/cancel may have occurred after acceptance. Never issue another POST.
-      if (error.status && error.status < 500 && error.status !== 408) this.remember(null);
+      if (error.status && error.status < 500 && error.status !== 408 && error.status !== 429) this.remember(null);
       throw error;
     }
     return this.poll(id,signal,state);
@@ -478,12 +566,17 @@ class StudioOperationAPI {
     let state = initial;
     for(let attempt=0; attempt<=12; attempt++) {
       signal?.throwIfAborted();
+      let retryAfter = 0;
       if (!state) {
         try { state = await this._request(path,{},signal); }
         catch(error) {
-          if (signal?.aborted) throw signal.reason;
-          if (error.status && error.status < 500 && error.status !== 408 && error.status !== 429) throw error;
-          // Bounded retry is allowed for a read, not for generation.
+          signal?.throwIfAborted();
+          const transient = [408, 429, 500, 502, 503, 504].includes(error.status)
+            || ['TypeError', 'NetworkError', 'TimeoutError', 'AbortError'].includes(error.name);
+          if (!transient || error.retryAfterMs > 10000) throw error;
+          // Only bounded reads repeat, never POST. Respect Retry-After or stop
+          // if waiting that long exceeds this automatic recovery contract.
+          retryAfter = error.retryAfterMs ?? 0;
         }
       }
       if (state) {
@@ -492,7 +585,7 @@ class StudioOperationAPI {
       }
       if (attempt === 12) break;
       state = null;
-      await this.wait(Math.min(300 * (2 ** attempt),2400),signal);
+      await this.wait(Math.max(retryAfter, Math.min(300 * (2 ** attempt), 2400)),signal);
     }
     throw new Error('等待后台结果超时；可恢复已有任务，不会重复提交');
   }

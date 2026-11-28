@@ -1,6 +1,6 @@
 {
   "name": "minimax-studio",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "minimax-studio: minimal dev dependency root for puppeteer-based tooling",
   "devDependencies": {
@@ -17,6 +17,6 @@
     "build:offline": "python3 scripts/build_offline.py",
     "dialogue": "node server/dialogue-server.mjs",
     "studio": "node server/studio-server.mjs",
-    "test:browser:studio": "node tests/studio.browser.mjs"
+    "test:browser:studio": "node tests/studio.browser.mjs && node tests/studio.proxy.browser.mjs"
   }
 }

@@ -876,28 +876,34 @@ class App {
 
   async runStudioOperation(action) {
     this.isGenerating = true;
-    this.studioController = new AbortController();
-    const pending = action(this.studioController.signal);
-    this.updateStudioActions();
-    let state;
+    const controller = new AbortController();
+    this.studioController = controller;
+    let state, audio;
     try {
+      const pending = action(controller.signal);
+      this.updateStudioActions();
       state = await pending;
+      if (state.status === 'completed' && ['speech', 'music'].includes(state.modality)) {
+        audio = await this.localStudio.downloadAudio(state.id, state.result?.audioUrl, controller.signal);
+      }
+      controller.signal.throwIfAborted();
     } catch(error) {
+      state = null; // Do not expose a playable/downloadable partial WAV.
       if (error.status === 404) {
         if (this.localStudio.remembered()) this.localStudio.remember(null);
         else this.localStudio.rememberResult(null);
       }
-      if (!this.studioController.signal.aborted) this.renderError(error.message || '本地任务未完成');
+      if (!controller.signal.aborted) this.renderError(error.message || '本地任务未完成');
     } finally {
       this.isGenerating = false;
       this.studioController = null;
     }
-    try { if (state) this.showStudioState(state); }
+    try { if (state) this.showStudioState(state, audio); }
     catch(error) { this.renderError(error.message || '本地结果无效'); }
     this.updateStudioActions();
   }
 
-  showStudioState(state) {
+  showStudioState(state, audio) {
     if (state.status === 'cancelled') {
       this.localStudio.remember(null);
       this.showEmpty();
@@ -906,7 +912,7 @@ class App {
     }
     if (state.status !== 'completed' || !LOCAL_WORKBENCH_MODELS.has(state.modality)) return;
     if (state.modality !== this.currentModel) this.switchModel(state.modality);
-    this.renderResult(state.result,{});
+    this.renderResult(state.result,{},audio);
     this.localStudio.rememberResult(state.id);
     this.localStudio.remember(null);
     Utils.showToast('已取得本地演示结果','success');
@@ -926,7 +932,8 @@ class App {
       const state = await this.localStudio.cancel(id);
       if (state.status === 'cancelled') this.studioController?.abort();
       // During a poll, if completion won, let the existing operation render once.
-      if (state.status === 'cancelled' || !this.isGenerating) this.showStudioState(state);
+      if (state.status === 'cancelled') this.showStudioState(state);
+      else if (!this.isGenerating) await this.runStudioOperation(() => Promise.resolve(state));
     } catch(error) {
       // A cancel can race the original upload. Retain the ID on ambiguous errors.
       if (error.status === 404 && !this.isGenerating) this.localStudio.remember(null);
@@ -997,7 +1004,7 @@ class App {
     }
   }
 
-  renderResult(result, params) {
+  renderResult(result, params, verifiedAudio) {
     this.resultEmpty.style.display = 'none';
     this.resultContent.style.display = 'block';
     this.revokeBlobUrls();
@@ -1008,7 +1015,7 @@ class App {
         break;
       case 'speech':
       case 'music':
-        this.renderAudioResult(result, params);
+        this.renderAudioResult(result, params,this.currentModel,verifiedAudio);
         break;
       case 'lyrics':
         this.renderLyricsResult(result);
@@ -1061,13 +1068,14 @@ class App {
     });
   }
 
-  renderAudioResult(result, params, modelType = this.currentModel) {
+  renderAudioResult(result, params, modelType = this.currentModel, verifiedAudio) {
     const info = result.extraInfo || {};
     const rawAudio = result.audio || result.audioHex;
-    const mimeType = api.getMimeType(info.audio_format || params.audio_format || params.format);
+    const mimeType = verifiedAudio ? 'audio/wav' : api.getMimeType(info.audio_format || params.audio_format || params.format);
     const audioFormat = mimeType === 'audio/mpeg' ? 'mp3' : mimeType.slice('audio/'.length);
-    const remoteUrl = api.getMediaUrl(rawAudio) || api.getMediaUrl(result.audioUrl) || api.getMediaUrl(info.audio_url);
-    const audioSrc = remoteUrl || this.createBlobUrl(api.hexToBlob(rawAudio, mimeType));
+    if (this.localStudio && !verifiedAudio) throw new Error('本地音频未通过校验');
+    const remoteUrl = !verifiedAudio && (api.getMediaUrl(rawAudio) || api.getMediaUrl(result.audioUrl) || api.getMediaUrl(info.audio_url));
+    const audioSrc = remoteUrl || this.createBlobUrl(verifiedAudio || api.hexToBlob(rawAudio, mimeType));
     this.resultContent.innerHTML = Templates.audioResult(audioFormat, modelType, info, Boolean(remoteUrl && !this.localStudio));
     this.resultContent.querySelector('.audio-download').href = audioSrc;
     const player = this.resultContent.querySelector('.audio-player');
