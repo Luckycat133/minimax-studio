@@ -203,3 +203,44 @@ test('client fails closed when socket truncates a length-declared audio response
   const client=new API({loadWav:async()=>wav,request:async (path,init)=>fetch('http://127.0.0.1:'+http.address().port+path,init)});
   await assert.rejects(client.downloadAudio(opId,path),e=>e.name==='TypeError'||/下载中断/.test(e.message));
 });
+
+const modeSource = readFileSync(new URL('../js/workbench-mode.js', import.meta.url), 'utf8');
+const resolveMode = runInNewContext(`${modeSource}\nresolveWorkbenchMode`, {
+  URLSearchParams, AbortController, setTimeout, clearTimeout, fetch,
+});
+const okHealth = (health, media = 'application/json') => ({
+  ok: true, headers: new Headers({'content-type': media}), async json() { return health; },
+});
+test('workbench mode grants direct access only on explicitly opted-in HTTP loopback', async () => {
+  const calls = [];
+  const absent = async (...args) => { calls.push(args); throw Error('fixture offline'); };
+  for (const host of ['127.0.0.1', 'localhost', '[::1]']) {
+    assert.equal(await resolveMode(new URL(`http://${host}:4174/?mode=direct-experiment`), absent), 'direct-experiment');
+  }
+  assert.equal(calls.length, 0);
+  for (const url of ['http://localhost/?mode=direct', 'https://localhost/?mode=direct-experiment',
+    'https://example.test/?mode=direct-experiment', 'http://localhost.example.test/?mode=direct-experiment']) {
+    assert.equal(await resolveMode(new URL(url), absent), 'unavailable');
+  }
+  assert.equal(calls.length, 4);
+  for (const [path, options] of calls) {
+    assert.equal(path, '/api/health');
+    assert.equal(options.redirect, 'error');
+    assert.equal(options.cache, 'no-store');
+    assert.ok(options.signal);
+  }
+});
+test('workbench health classes are disjoint and never select Direct on failure', async () => {
+  const page = new URL('http://127.0.0.1:4174/');
+  const fixture = {service: 'minimax-studio-local', status: 'ok', mode: 'fixture', version: 1};
+  const fake = (health, type) => async () => okHealth(health, type);
+  assert.equal(await resolveMode(page, fake(fixture, 'application/json; charset=utf-8')), 'controlled-fixture');
+  assert.equal(await resolveMode(page, fake({service: 'minimax-studio-backend', status: 'ok'})), 'legacy-backend');
+  for (const health of [{...fixture, version: '1'}, {...fixture, version: 2}, {...fixture, mode: 'live'},
+    {...fixture, status: 'error'}, {service: 'dialogue', status: 'ok'}, null]) {
+    assert.equal(await resolveMode(page, fake(health)), 'unavailable');
+  }
+  assert.equal(await resolveMode(page, fake(fixture, 'text/html')), 'unavailable');
+  assert.equal(await resolveMode(page, async () => ({...okHealth(fixture), ok: false})), 'unavailable');
+  assert.equal(await resolveMode(page, async () => ({...okHealth(fixture), json() { throw Error('bad JSON'); }})), 'unavailable');
+});
