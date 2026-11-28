@@ -4,6 +4,7 @@ import {get} from 'node:http';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import {createStudioServer} from '../server/studio-server.mjs';
+import * as wav from '../js/production-core.mjs';
 
 const entries = [
   ['chat','messages'],['image','prompt'],['video','prompt'],['speech','text'],['music','prompt'],['lyrics','prompt']
@@ -12,7 +13,7 @@ const source = readFileSync(new URL('../js/backend-api.js',import.meta.url),'utf
 const runClient = () => runInNewContext(`${source}\nStudioOperationAPI`,{
   window:{location:{origin:'http://127.0.0.1'},addEventListener(){}},
   navigator:{onLine:true},localStorage:{getItem(){return null;}},
-  AbortSignal,AbortController,setTimeout,clearTimeout,fetch
+  AbortSignal,AbortController,setTimeout,clearTimeout,fetch,Blob,Uint8Array
 });
 const payload = (id,modality,key) => ({id,modality,params:{[key]:'fixture'}});
 const id = n => n.toString(16).padStart(32,'0');
@@ -124,4 +125,81 @@ test('client: abort interrupts polling; DELETE cancels without a second POST',as
   assert.equal(api.remembered(),opId); // in-memory even without sessionStorage
   assert.equal((await api.cancel(opId)).status,'cancelled');
   assert.deepEqual(calls,['POST','DELETE']);
+});
+
+test('client classifies HTML gateway failures and honors Retry-After without repeating POST', async ()=>{
+  const API = runClient();
+  const opId=id(21), waits=[], calls=[];
+  const statuses = [502,429,504,200];
+  const now = Date.UTC(2026,10,28,0,0,0);
+  const client = new API({
+    createId:()=>opId, now:()=>now, wait:async ms=>waits.push(ms),
+    request:async (_path,init)=>{
+      const method=init.method||'GET';
+      calls.push(method);
+      if (method==='POST') return new Response('<b>untrusted gateway text</b>',{status:504,headers:{'content-type':'text/html'}});
+      const status=statuses.shift();
+      return status===200 ? Response.json({id:opId,modality:'speech',status:'completed'})
+        : new Response('proxy failure',{status,headers:{'content-type':'text/html',
+            ...(status===429?{'retry-after':new Date(now+2000).toUTCString()}:{})}});
+    }
+  });
+  await assert.rejects(client.start('speech',{text:'not stored'}), e=>e.status===504&&!e.message.includes('untrusted'));
+  assert.equal(client.remembered(),opId);
+  assert.equal((await client.poll(opId)).status,'completed');
+  assert.deepEqual(waits,[300,2000,1200]);
+  assert.deepEqual(calls,['POST','GET','GET','GET','GET']);
+});
+
+test('client does not retry non-transient failures or prematurely retry long throttles', async ()=>{
+  const API=runClient();
+  const opId=id(23);
+  for (const status of [404,429,501]) {
+    let requests=0;
+    const client=new API({
+      wait:async()=>assert.fail('unexpected retry'),
+      request:async()=>{requests++;return new Response('<html/>',{status,headers:{'retry-after':'60'}});}
+    });
+    await assert.rejects(client.poll(opId), e=>e.status===status);
+    assert.equal(requests,1);
+  }
+});
+
+test('client buffers only verified exact WAV, rejects clean chunk truncation and damaged chunks', async ()=>{
+  const API=runClient(), opId=id(24), path='/api/studio/operations/'+opId+'/download';
+  const fixture=new Uint8Array(readFileSync(new URL('../server/fixtures/preview.wav',import.meta.url)));
+  const damaged=fixture.slice();
+  // Corrupt an internal chunk length without changing the outer RIFF length.
+  new DataView(damaged.buffer).setUint32(40,0xffffffff,true);
+  const candidates=[fixture.subarray(0,140),damaged,fixture];
+  let consumed=0;
+  const client=new API({loadWav:async()=>wav,request:async (url,input)=>{
+    assert.equal(url,path);
+    assert.equal(input.redirect,'error');
+    assert.equal(input.headers.Accept,'audio/wav');
+    const bytes=candidates[consumed++];
+    const body=new ReadableStream({start(c){c.enqueue(bytes.slice(0,50));c.enqueue(bytes.slice(50));c.close();}});
+    return new Response(body,{headers:{'Content-Type':'audio/wav'}});
+  }});
+  await assert.rejects(client.downloadAudio(opId,'https://example.invalid/audio'),/地址无效/);
+  assert.equal(consumed,0);
+  await assert.rejects(client.downloadAudio(opId,path),/下载中断或校验失败/);
+  await assert.rejects(client.downloadAudio(opId,path),/下载中断或校验失败/);
+  const result = await client.downloadAudio(opId,path);
+  assert.equal(result.type,'audio/wav');
+  assert.deepEqual(new Uint8Array(await result.arrayBuffer()),fixture);
+});
+
+test('client fails closed when socket truncates a length-declared audio response', async t=>{
+  const API=runClient(), opId=id(25), path='/api/studio/operations/'+opId+'/download';
+  const fixture=readFileSync(new URL('../server/fixtures/preview.wav',import.meta.url));
+  const { createServer }=await import('node:http');
+  const http=createServer((_req,res)=>{
+    res.writeHead(200,{'Content-Type':'audio/wav','Content-Length':fixture.length});
+    res.write(fixture.subarray(0,140),()=>res.destroy());
+  });
+  await new Promise((resolve,reject)=>{http.on('error',reject);http.listen(0,'127.0.0.1',resolve);});
+  t.after(()=>http.close());
+  const client=new API({loadWav:async()=>wav,request:async (path,init)=>fetch('http://127.0.0.1:'+http.address().port+path,init)});
+  await assert.rejects(client.downloadAudio(opId,path),e=>e.name==='TypeError'||/下载中断/.test(e.message));
 });

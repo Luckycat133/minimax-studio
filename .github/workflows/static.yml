@@ -28,6 +28,9 @@ jobs:
         env:
           PUPPETEER_SKIP_DOWNLOAD: "true"
         run: npm ci
+      - name: Verify locked server dependencies without running dependency scripts
+        working-directory: server
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Test offline DOM workflows
         run: npm run test:dom
       - name: Test offline dialogue and multimodal contracts (no provider calls)

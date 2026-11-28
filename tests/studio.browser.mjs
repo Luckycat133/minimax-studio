@@ -1,6 +1,8 @@
 // Full UI fixture: no request may leave the loopback host.
 import assert from 'node:assert/strict';
 import puppeteer from 'puppeteer';
+import {readFileSync} from 'node:fs';
+import {downloadStudioAudio} from './browser-download.mjs';
 import {createStudioServer} from '../server/studio-server.mjs';
 
 const app=createStudioServer();
@@ -45,12 +47,8 @@ try {
   await page.waitForSelector('#studio-resume',{visible:true});
   await page.click('#studio-resume');
   await page.waitForSelector('.audio-player');
-  const content=await page.$eval('.audio-download',async a=>{
-    const response=await fetch(a.href);
-    const bytes=new Uint8Array(await response.arrayBuffer());
-    return {status:response.status,magic:String.fromCharCode(...bytes.slice(0,4)),download:a.hasAttribute('download')};
-  });
-  assert.deepEqual(content,{status:200,magic:'RIFF',download:true});
+  const content = await downloadStudioAudio(page, 'minimax_music.wav');
+  assert.deepEqual(content, readFileSync(new URL('../server/fixtures/preview.wav',import.meta.url)));
   assert.equal(methods.filter(x=>x==='POST').length,cases.length);
   assert.deepEqual(pageErrors,[]);
   assert.deepEqual(external,[]);

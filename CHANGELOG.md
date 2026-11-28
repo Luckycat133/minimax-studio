@@ -10,6 +10,13 @@ at `0.1.0`.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-28
+
+- Classify proxy 429/502/504 errors even when their bodies are HTML; bound read-only retries and preserve ambiguous submissions for explicit recovery.
+- Refuse truncated WAV responses before attaching playback or download. Recover byte-verified audio by reopening the original operation.
+- Exercise the default zero-quota UI through a fault-injecting loopback server and assert no credential or localStorage writes.
+
+
 ## [0.3.0] - 2026-11-27
 
 ### Added
